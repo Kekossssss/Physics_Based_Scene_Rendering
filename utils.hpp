@@ -56,7 +56,7 @@ struct object_to_gpu {
     unsigned char id[NB_OBJECT][2]; // [0] = Object type, [1] = Object identifier
     position pos[NB_OBJECT];
     rotation rot[NB_OBJECT];
-    float dimension[NB_OBJECT][MAX_DIMENSIONS_OBJECTS];
+    float dimension[NB_OBJECT][MAX_DIMENSIONS_OBJECTS]; //Table of the dimensions for each kind of shape, use a function to assign each index to it's corresponding dimension according to the kind of shape
 };
 
 // IMPORTANT: CPU dev only need to provide this structure, GPU dev will do the translation towards the previous struct
@@ -65,7 +65,14 @@ struct object {
     unsigned char id[NB_OBJECT][2]; // [0] = Object type, [1] = Object identifier
     position pos[NB_OBJECT];
     rotation rot[NB_OBJECT];
-    float dimension[NB_OBJECT][MAX_DIMENSIONS_OBJECTS];
+    float dimension[NB_OBJECT][MAX_DIMENSIONS_OBJECTS]; //Table of the dimensions for each kind of shape, use a function to assign each index to it's corresponding dimension according to the kind of shape
     // CPU dev can add more object related values here
 };
-//------------------------------------------------------------------------------------------//
+
+// Image array outputed by the GPU in order to be visualised
+struct image_array {
+    unsigned char red[IMAGE_WIDTH*IMAGE_HEIGHT];
+    unsigned char green[IMAGE_WIDTH*IMAGE_HEIGHT];
+    unsigned char blue[IMAGE_WIDTH*IMAGE_HEIGHT];
+    unsigned char alpha[IMAGE_WIDTH*IMAGE_HEIGHT];  //Opacity of the color
+};
