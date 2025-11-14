@@ -30,10 +30,14 @@ int main (int argc, char** argv) {
 
     
     // Main loop
-    while (true) {
+    auto loop = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> duration_loop = loop - start;
+    while (duration_loop.count()<MAX_SIMU_TIME) {
         // Start of rendering loop
 
         // End of rendering loop
+        loop = std::chrono::high_resolution_clock::now();
+        duration_loop = loop - start;
     }
     // End of loop initialization
     //...

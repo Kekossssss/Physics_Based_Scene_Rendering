@@ -7,7 +7,7 @@
 // Global parameters definition
 //------------------------------------------------------------------------------------------//
 // Configurable DEBUG parameters
-#define DEBUG_PERF false
+#define DEBUG_PERF true
 #define DEBUG_VALUES false
 
 // Images resolution for the GPU to render
