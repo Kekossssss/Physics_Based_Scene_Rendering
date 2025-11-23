@@ -1,4 +1,4 @@
-NVFLAGS := -std=c++11 -O3
+NVFLAGS := -std=c++17 -O3
 TARGET := main
 
 .PHONY: all
@@ -6,6 +6,12 @@ all: $(TARGET)
 
 $(TARGET): main.cu
 	nvcc $(NVFLAGS) -o main main.cu
+
+.PHONY: gpu
+all: gpu_exec
+
+gpu_exec: gpu_part.cu
+	nvcc $(NVFLAGS) -o gpu_exec gpu_part.cu
 
 clean:
 	rm -rf main *.o
