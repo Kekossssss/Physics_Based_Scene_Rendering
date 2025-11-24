@@ -14,14 +14,16 @@
 #define DEBUG_VALUES false
 
 // Images resolution for the GPU to render
-#define TOP_IMAGE_OFFSET_WIDTH 1.0
-#define TOP_IMAGE_OFFSET_HEIGHT 1.0
-#define IMAGE_RESOLUTION_WIDTH 32
-#define IMAGE_RESOLUTION_HEIGHT 32
+#define IMAGE_RESOLUTION_WIDTH 50
+#define IMAGE_RESOLUTION_HEIGHT 50
 
 // Image real size in the space
 #define IMAGE_WIDTH 1000.0
 #define IMAGE_HEIGHT 1000.0
+
+// Top Coordinates (0,0) of the image in the space (position of the top left corner of the image in the space)
+#define IMAGE_OFFSET_WIDTH 0.0
+#define IMAGE_OFFSET_HEIGHT 0.0
 
 // Defines the number of objects that are going to be simulated
 #define NB_OBJECT 10
@@ -35,8 +37,8 @@
 #define BOX_DEPTH 2000.0
 
 // Pixel sizes
-#define PIXEL_WIDTH_SIZE BOX_WIDTH/IMAGE_WIDTH
-#define PIXEL_HEIGHT_SIZE BOX_HEIGHT/IMAGE_HEIGHT
+#define PIXEL_WIDTH_SIZE IMAGE_WIDTH/IMAGE_RESOLUTION_WIDTH
+#define PIXEL_HEIGHT_SIZE IMAGE_HEIGHT/IMAGE_RESOLUTION_HEIGHT
 
 // Maximum simulation time before end of program (ms)
 #define MAX_SIMU_TIME 120.0
@@ -90,6 +92,7 @@ struct image_array {
     unsigned char alpha[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];  //Opacity of the color
 };
 
+// Small AI generated function to output an image from the image array (does not currently support alpha values)
 bool save_as_bmp(const image_array& img, const char* filename) {
     std::ofstream file(filename, std::ios::binary);
     
