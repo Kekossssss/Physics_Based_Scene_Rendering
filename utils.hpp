@@ -14,12 +14,12 @@
 #define DEBUG_VALUES false
 
 // Images resolution for the GPU to render
-#define IMAGE_RESOLUTION_WIDTH 50
-#define IMAGE_RESOLUTION_HEIGHT 50
+#define IMAGE_RESOLUTION_WIDTH 40
+#define IMAGE_RESOLUTION_HEIGHT 40
 
 // Image real size in the space
-#define IMAGE_WIDTH 1000.0
-#define IMAGE_HEIGHT 1000.0
+#define IMAGE_WIDTH 2000.0
+#define IMAGE_HEIGHT 2000.0
 
 // Top Coordinates (0,0) of the image in the space (position of the top left corner of the image in the space)
 #define IMAGE_OFFSET_WIDTH 0.0
@@ -48,6 +48,10 @@
 
 // Fixed time between 2 rendered frame/New position of objects (ms)
 #define INTERVAL_TIME 10.0
+
+// Correspondance between ID of objects and their types
+#define CUBE 0
+#define SPHERE 1
 
 //------------------------------------------------------------------------------------------//
 // Structures definition
