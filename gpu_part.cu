@@ -25,11 +25,40 @@ float dist2D(float A_x, float A_y, float B_x, float B_y) {
     float dy = B_y - A_y;
     return sqrt(dx * dx + dy * dy);
 }
+float dist3D(position A, position B) {
+    float dx = B.x - A.x;
+    float dy = B.y - A.y;
+    float dz = B.z - A.z;
+    return sqrt(dx * dx + dy * dy + dz * dz);
+}
 
 float squareDist2D(float A_x, float A_y, float B_x, float B_y) {
     float dx = B_x - A_x;
     float dy = B_y - A_y;
     return dx * dx + dy * dy;
+}
+
+void rotate2D_x(float& new_y, float& new_z, float old_y, float old_z, float theta) {
+    new_y = old_y * cos(theta) - old_z * sin(theta);
+    new_z = old_y * sin(theta) + old_z * cos(theta);
+}
+
+void rotate2D_y(float& new_x, float& new_z, float old_x, float old_z, float theta) {
+    new_z = old_z * cos(theta) - old_x * sin(theta);
+    new_x = old_z * sin(theta) + old_x * cos(theta);
+}
+
+void rotate2D_z(float& new_x, float& new_y, float old_x, float old_y, float theta) {
+    new_x = old_x * cos(theta) - old_y * sin(theta);
+    new_y = old_x * sin(theta) + old_y * cos(theta);
+}
+
+position rotate3D(position pos, rotation rot, position pos_center) {
+    position new_pos;
+    rotate2D_x(new_pos.y, new_pos.z, pos.y, pos.z, rot.theta_x);
+    rotate2D_y(new_pos.x, new_pos.z, pos.x, new_pos.z, rot.theta_y);
+    rotate2D_z(new_pos.x, new_pos.y, new_pos.x, new_pos.y, rot.theta_z);
+    return new_pos;
 }
 
 bool belongs_2D_4side_convex_polygone(float x, float y, position A0, position A1, position A2, position A3, float D) {
@@ -78,62 +107,117 @@ bool belongs_2D_4side_convex_polygone_with_sides(float x, float y, position A0, 
 
 
 int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) {
-    // Compute positions of object points (TODO: rotation)
+    // Compute positions of cube summits
+    //    E----F
+    //   /    /|
+    //  A----B G
+    //  |    |/
+    //  D----C
     position A;
-    A.x = pos.x - dimensions[0]/2.0;
-    A.y = pos.y - dimensions[0]/2.0;
-    A.z = pos.z - dimensions[0]/2.0;
+    A.x = -dimensions[0]/2.0;
+    A.y = -dimensions[0]/2.0;
+    A.z = -dimensions[0]/2.0;
+    A = rotate3D(A, rot, pos);
+    A.x += pos.x;
+    A.y += pos.y;
+    A.z += pos.z;
     position B;
-    B.x = pos.x + dimensions[0]/2.0;
-    B.y = pos.y - dimensions[0]/2.0;
-    B.z = pos.z - dimensions[0]/2.0;
+    B.x = dimensions[0]/2.0;
+    B.y = -dimensions[0]/2.0;
+    B.z = -dimensions[0]/2.0;
+    B = rotate3D(B, rot, pos);
+    B.x += pos.x;
+    B.y += pos.y;
+    B.z += pos.z;
     position C;
-    C.x = pos.x + dimensions[0]/2.0;
-    C.y = pos.y + dimensions[0]/2.0;
-    C.z = pos.z - dimensions[0]/2.0;
+    C.x = dimensions[0]/2.0;
+    C.y = dimensions[0]/2.0;
+    C.z = -dimensions[0]/2.0;
+    C = rotate3D(C, rot, pos);
+    C.x += pos.x;
+    C.y += pos.y;
+    C.z += pos.z;
     position D;
-    D.x = pos.x - dimensions[0]/2.0;
-    D.y = pos.y + dimensions[0]/2.0;
-    D.z = pos.z - dimensions[0]/2.0;
+    D.x = -dimensions[0]/2.0;
+    D.y = +dimensions[0]/2.0;
+    D.z = -dimensions[0]/2.0;
+    D = rotate3D(D, rot, pos);
+    D.x += pos.x;
+    D.y += pos.y;
+    D.z += pos.z;
     position E;
-    E.x = pos.x - dimensions[0]/2.0;
-    E.y = pos.y - dimensions[0]/2.0;
-    E.z = pos.z + dimensions[0]/2.0;
+    E.x = -dimensions[0]/2.0;
+    E.y = -dimensions[0]/2.0;
+    E.z = dimensions[0]/2.0;
+    E = rotate3D(E, rot, pos);
+    E.x += pos.x;
+    E.y += pos.y;
+    E.z += pos.z;
     position F;
-    F.x = pos.x + dimensions[0]/2.0;
-    F.y = pos.y - dimensions[0]/2.0;
-    F.z = pos.z + dimensions[0]/2.0;
+    F.x = dimensions[0]/2.0;
+    F.y = -dimensions[0]/2.0;
+    F.z = dimensions[0]/2.0;
+    F = rotate3D(F, rot, pos);
+    F.x += pos.x;
+    F.y += pos.y;
+    F.z += pos.z;
     position G;
-    G.x = pos.x + dimensions[0]/2.0;
-    G.y = pos.y + dimensions[0]/2.0;
-    G.z = pos.z + dimensions[0]/2.0;
+    G.x = dimensions[0]/2.0;
+    G.y = dimensions[0]/2.0;
+    G.z = dimensions[0]/2.0;
+    G = rotate3D(G, rot, pos);
+    G.x += pos.x;
+    G.y += pos.y;
+    G.z += pos.z;
     position H;
-    H.x = pos.x - dimensions[0]/2.0;
-    H.y = pos.y + dimensions[0]/2.0;
-    H.z = pos.z + dimensions[0]/2.0;
-    // Compute belonging in front plan
-    if (belongs_2D_4side_convex_polygone_with_sides(x, y, A, B, C, D, dimensions[0]) == true) {
-        return 2;
+    H.x = -dimensions[0]/2.0;
+    H.y = dimensions[0]/2.0;
+    H.z = dimensions[0]/2.0;
+    H = rotate3D(H, rot, pos);
+    H.x += pos.x;
+    H.y += pos.y;
+    H.z += pos.z;
+    // Compute belonging in front or back plan
+    float front_z = (A.z + B.z + C.z + D.z)/4.0;
+    float back_z = (E.z + F.z + G.z + H.z)/4.0;
+    if (back_z > front_z) {
+        // Front
+        if (belongs_2D_4side_convex_polygone_with_sides(x, y, A, B, C, D, dimensions[0]) == true) {
+            return 2;
+        }
+    } else {
+        // Back
+        if (belongs_2D_4side_convex_polygone_with_sides(x, y, E, F, G, H, dimensions[0]) == true) {
+            return 3;
+        }
     }
-    // Compute belonging in top plan
-    if (belongs_2D_4side_convex_polygone_with_sides(x, y, A, B, F, E, dimensions[0]) == true) {
-        return 0;
+    // Compute belonging in top or bottom plan
+    float top_z = (A.z + B.z + F.z + E.z)/4.0;
+    float bottom_z = (D.z + C.z + G.z + H.z)/4.0;
+    if (bottom_z > top_z) {
+        // Top
+        if (belongs_2D_4side_convex_polygone_with_sides(x, y, A, B, F, E, dimensions[0]) == true) {
+            return 0;
+        }
+    } else {
+        // Bottom
+        if (belongs_2D_4side_convex_polygone_with_sides(x, y, D, C, G, H, dimensions[0]) == true) {
+            return 5;
+        }
     }
-    //// Compute belonging in bottom plan
-    if (belongs_2D_4side_convex_polygone_with_sides(x, y, D, C, G, H, dimensions[0]) == true) {
-        return 5;
-    }
-    //// Compute belonging in back plan
-    if (belongs_2D_4side_convex_polygone_with_sides(x, y, E, F, G, H, dimensions[0]) == true) {
-        return 3;
-    }
-    //// Compute belonging in left plan
-    if (belongs_2D_4side_convex_polygone_with_sides(x, y, A, E, H, D, dimensions[0]) == true) {
-        return 4;
-    }
-    //// Compute belonging in right plan
-    if (belongs_2D_4side_convex_polygone_with_sides(x, y, B, F, G, C, dimensions[0]) == true) {
-        return 1;
+    //// Compute belonging in right or left plan
+    float right_z = (B.z + F.z + G.z + C.z)/4.0;
+    float left_z = (A.z + E.z + H.z + D.z)/4.0;
+    if (left_z > right_z) {
+        // Right
+        if (belongs_2D_4side_convex_polygone_with_sides(x, y, B, F, G, C, dimensions[0]) == true) {
+            return 1;
+        }
+    } else {
+        // Left
+        if (belongs_2D_4side_convex_polygone_with_sides(x, y, A, E, H, D, dimensions[0]) == true) {
+            return 4;
+        }
     }
     return -1;
 }
@@ -255,7 +339,7 @@ int main (int argc, char** argv) {
     object_to_gpu tab_pos;
 
     // First object (cube of side R=50.0)
-    tab_pos.type[0] = 0;
+    tab_pos.type[0] = CUBE;
     tab_pos.pos[0].x = 50.0;
     tab_pos.pos[0].y = 50.0;
     tab_pos.pos[0].z = 10.0;
@@ -269,7 +353,7 @@ int main (int argc, char** argv) {
     tab_pos.col[0][0].green = 255;
 
     // Second object (cube of side R=100.0)
-    tab_pos.type[1] = 0;
+    tab_pos.type[1] = CUBE;
     tab_pos.pos[1].x = 50.0;
     tab_pos.pos[1].y = 50.0;
     tab_pos.pos[1].z = 40.0;
@@ -283,7 +367,7 @@ int main (int argc, char** argv) {
     tab_pos.col[1][0].green = 0;
 
     // Third object (cube of side R=200.0)
-    tab_pos.type[2] = 0;
+    tab_pos.type[2] = CUBE;
     tab_pos.pos[2].x = 200.0;
     tab_pos.pos[2].y = 200.0;
     tab_pos.pos[2].z = 20.0;
@@ -297,7 +381,7 @@ int main (int argc, char** argv) {
     tab_pos.col[2][0].green = 0;
 
     // Fourth object (sphere of side R=150.0)
-    tab_pos.type[3] = 1;
+    tab_pos.type[3] = SPHERE;
     tab_pos.pos[3].x = 200.0;
     tab_pos.pos[3].y = 200.0;
     tab_pos.pos[3].z = 10.0;
@@ -310,15 +394,50 @@ int main (int argc, char** argv) {
     tab_pos.col[3][0].blue = 0;
     tab_pos.col[3][0].green = 255;
 
+    // Fifth object (cube of side R=400.0)
+    tab_pos.type[4] = CUBE;
+    tab_pos.pos[4].x = 50.0;
+    tab_pos.pos[4].y = 50.0;
+    tab_pos.pos[4].z = 10.0;
+    tab_pos.rot[4].theta_x = 0.0;
+    tab_pos.rot[4].theta_y = 0.0;
+    tab_pos.rot[4].theta_z = 0.0;
+    tab_pos.dimension[4][0] = 400.0;
+    tab_pos.is_single_color[4] = false;
+    //// Top
+    tab_pos.col[4][0].red = 255;
+    tab_pos.col[4][0].blue = 255;
+    tab_pos.col[4][0].green = 255;
+    //// Right
+    tab_pos.col[4][1].red = 0;
+    tab_pos.col[4][1].blue = 0;
+    tab_pos.col[4][1].green = 255;
+    //// Front
+    tab_pos.col[4][2].red = 255;
+    tab_pos.col[4][2].blue = 0;
+    tab_pos.col[4][2].green = 0;
+    //// Back
+    tab_pos.col[4][3].red = 255;
+    tab_pos.col[4][3].blue = 0;
+    tab_pos.col[4][3].green = 255;
+    //// Left
+    tab_pos.col[4][4].red = 0;
+    tab_pos.col[4][4].blue = 255;
+    tab_pos.col[4][4].green = 0;
+    //// Bottom
+    tab_pos.col[4][5].red = 255;
+    tab_pos.col[4][5].blue = 255;
+    tab_pos.col[4][5].green = 255;
+
     // Test image arrays
     image_array image;
 
     printf("Waiting to start\n");
-    sleep(10);
+    sleep(5);
 
     // Array of 2D Object identifier (0 : index of object, 1 : hit side)
     id_array identifier_array[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
-    for (int i=0; i<30; i++) {
+    for (int i=0; i<100; i++) {
         update_identifiers(tab_pos, identifier_array);
 
         // """Image preview"""
@@ -331,6 +450,10 @@ int main (int argc, char** argv) {
         update_image(identifier_array, tab_pos, image);
 
         if (save_as_bmp(image, "test_image.bmp")) {
+            if (i>0) {
+                printf("\x1b[1F"); // Move to beginning of previous line
+                printf("\x1b[2K"); // Clear entire line
+            }
             std::cout << "BMP Image " << i << " succesfully created !" << std::endl;
         }
 
@@ -338,7 +461,13 @@ int main (int argc, char** argv) {
         tab_pos.pos[0].y += 40.0;
         tab_pos.pos[1].y += 40.0;
         tab_pos.pos[2].x += 40.0;
+        tab_pos.pos[3].x += 10.0;
+        tab_pos.pos[4].x += 5.0;
+        tab_pos.pos[4].y += 5.0;
+        tab_pos.rot[4].theta_x += 0.1;
+        tab_pos.rot[4].theta_y += 0.1;
+        tab_pos.rot[4].theta_z += 0.1;
 
-        sleep(1);
+        usleep(100000);
     }    
 }

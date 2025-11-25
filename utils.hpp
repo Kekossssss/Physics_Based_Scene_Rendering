@@ -14,8 +14,8 @@
 #define DEBUG_VALUES false
 
 // Images resolution for the GPU to render
-#define IMAGE_RESOLUTION_WIDTH 200
-#define IMAGE_RESOLUTION_HEIGHT 200
+#define IMAGE_RESOLUTION_WIDTH 500
+#define IMAGE_RESOLUTION_HEIGHT 500
 
 // Image real size in the space
 #define IMAGE_WIDTH 2000.0
@@ -26,7 +26,7 @@
 #define IMAGE_OFFSET_HEIGHT 0.0
 
 // Defines the number of objects that are going to be simulated
-#define NB_OBJECT 4
+#define NB_OBJECT 5
 
 // Defines the maximum number of dimensions that an object can have (radius for a sphere, lenght/height/width for a rectangle, side for a square...)
 #define MAX_DIMENSIONS_OBJECTS 3
