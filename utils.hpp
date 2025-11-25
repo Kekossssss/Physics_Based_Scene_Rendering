@@ -14,8 +14,8 @@
 #define DEBUG_VALUES false
 
 // Images resolution for the GPU to render
-#define IMAGE_RESOLUTION_WIDTH 40
-#define IMAGE_RESOLUTION_HEIGHT 40
+#define IMAGE_RESOLUTION_WIDTH 200
+#define IMAGE_RESOLUTION_HEIGHT 200
 
 // Image real size in the space
 #define IMAGE_WIDTH 2000.0
@@ -26,10 +26,13 @@
 #define IMAGE_OFFSET_HEIGHT 0.0
 
 // Defines the number of objects that are going to be simulated
-#define NB_OBJECT 10
+#define NB_OBJECT 4
 
 // Defines the maximum number of dimensions that an object can have (radius for a sphere, lenght/height/width for a rectangle, side for a square...)
 #define MAX_DIMENSIONS_OBJECTS 3
+
+// Defines the maximum number of faces that an object can have (used to define the colors of each face)
+#define MAX_FACES_OBJECT 6
 
 // Space in which the simulation will occur, and so, in which object can move
 #define BOX_WIDTH 2000.0
@@ -70,12 +73,27 @@ struct rotation {
     float theta_z;
 };
 
+// Structure to simplify the access to the colors of an object
+struct colors {
+    unsigned char red;
+    unsigned char green;
+    unsigned char blue;
+};
+
+struct id_array {
+    int id;
+    int side;
+};
+
+
 // Structure to gather all of the objects at a defined time with all of their characteristics (with only GPU related values)
 struct object_to_gpu {
-    unsigned char id[NB_OBJECT][2]; // [0] = Object type, [1] = Object identifier
+    unsigned char type[NB_OBJECT]; // Object type
     position pos[NB_OBJECT];
     rotation rot[NB_OBJECT];
     float dimension[NB_OBJECT][MAX_DIMENSIONS_OBJECTS]; //Table of the dimensions for each kind of shape, use a function to assign each index to it's corresponding dimension according to the kind of shape
+    bool is_single_color[NB_OBJECT];
+    colors col[NB_OBJECT][MAX_FACES_OBJECT]; // Follows the following logic for assigning colors : Top -> Bottom of the shape, Right -> Left of the shape, Front -> Back of the shape
 };
 
 // IMPORTANT: CPU dev only need to provide this structure, GPU dev will do the translation towards the previous struct
