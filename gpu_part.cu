@@ -15,56 +15,305 @@
 #define RENDERED_FRAMES 100
 
 //------------------------------------------------------------------------------------------//
-// GPU Functions (Scene rendering)
+// CPU Functions (Video Memory Management)
 //------------------------------------------------------------------------------------------//
+void initiate_video_memory(id_array& gpu_id_array, image_array& gpu_image, gpu_object_pointers& gpu_obj_pointers) {
+    // Allocate references to variables in GPU memory
+    //// GPU only id_array variable
+    if (cudaMalloc(&gpu_id_array.id, sizeof(int) * RESOLUTION)!=cudaSuccess) {
+        printf("Cuda Malloc Failed\n");
+    }
+    if (cudaMalloc(&gpu_id_array.side, sizeof(int) * RESOLUTION)!=cudaSuccess) {
+        printf("Cuda Malloc Failed\n");
+    }
+    //// GPU Image variable
+    if (cudaMalloc(&gpu_image.red, sizeof(unsigned char) * RESOLUTION)!=cudaSuccess) {
+        printf("Cuda Malloc Failed\n");
+    }
+    if (cudaMalloc(&gpu_image.green, sizeof(unsigned char) * RESOLUTION)!=cudaSuccess) {
+        printf("Cuda Malloc Failed\n");
+    }
+    if (cudaMalloc(&gpu_image.blue, sizeof(unsigned char) * RESOLUTION)!=cudaSuccess) {
+        printf("Cuda Malloc Failed\n");
+    }
+    if (cudaMalloc(&gpu_image.alpha, sizeof(unsigned char) * RESOLUTION)!=cudaSuccess) {
+        printf("Cuda Malloc Failed\n");
+    }
+    //// GPU objects variable allocation
+    if (cudaMalloc(&gpu_obj_pointers.type, sizeof(unsigned char) * NB_OBJECT)!=cudaSuccess) {
+        printf("Cuda Malloc Failed\n");
+    }
+    if (cudaMalloc(&gpu_obj_pointers.pos_x, sizeof(float) * NB_OBJECT)!=cudaSuccess) {
+        printf("Cuda Malloc Failed\n");
+    }
+    if (cudaMalloc(&gpu_obj_pointers.pos_y, sizeof(float) * NB_OBJECT)!=cudaSuccess) {
+        printf("Cuda Malloc Failed\n");
+    }
+    if (cudaMalloc(&gpu_obj_pointers.pos_z, sizeof(float) * NB_OBJECT)!=cudaSuccess) {
+        printf("Cuda Malloc Failed\n");
+    }
+    if (cudaMalloc(&gpu_obj_pointers.rot_x, sizeof(float) * NB_OBJECT)!=cudaSuccess) {
+        printf("Cuda Malloc Failed\n");
+    }
+    if (cudaMalloc(&gpu_obj_pointers.rot_y, sizeof(float) * NB_OBJECT)!=cudaSuccess) {
+        printf("Cuda Malloc Failed\n");
+    }
+    if (cudaMalloc(&gpu_obj_pointers.rot_z, sizeof(float) * NB_OBJECT)!=cudaSuccess) {
+        printf("Cuda Malloc Failed\n");
+    }
+    if (cudaMalloc(&gpu_obj_pointers.dimension, sizeof(float) * NB_OBJECT * MAX_DIMENSIONS_OBJECTS)!=cudaSuccess) {
+        printf("Cuda Malloc Failed\n");
+    }
+    if (cudaMalloc(&gpu_obj_pointers.red, sizeof(unsigned char) * NB_OBJECT * MAX_FACES_OBJECT)!=cudaSuccess) {
+        printf("Cuda Malloc Failed\n");
+    }
+    if (cudaMalloc(&gpu_obj_pointers.green, sizeof(unsigned char) * NB_OBJECT * MAX_FACES_OBJECT)!=cudaSuccess) {
+        printf("Cuda Malloc Failed\n");
+    }
+    if (cudaMalloc(&gpu_obj_pointers.blue, sizeof(unsigned char) * NB_OBJECT * MAX_FACES_OBJECT)!=cudaSuccess) {
+        printf("Cuda Malloc Failed\n");
+    }
+    if (cudaMalloc(&gpu_obj_pointers.is_single_color, sizeof(bool) * NB_OBJECT)!=cudaSuccess) {
+        printf("Cuda Malloc Failed\n");
+    }
+}
 
+void copy_initial_data_to_video_memory(gpu_object_pointers& gpu_obj_pointers, object_to_gpu& obj) {
+    // Copy data that doesn't need to be refetch after initialisation
+    unsigned char col_r[NB_OBJECT * MAX_FACES_OBJECT];
+    unsigned char col_g[NB_OBJECT * MAX_FACES_OBJECT];
+    unsigned char col_b[NB_OBJECT * MAX_FACES_OBJECT];
+    float dimension[NB_OBJECT * MAX_DIMENSIONS_OBJECTS];
+    for (int i=0; i<NB_OBJECT; i++) {
+        if (obj.is_single_color[i] == true) {
+            col_r[i*MAX_FACES_OBJECT] = obj.col[i][0].red;
+            col_g[i*MAX_FACES_OBJECT] = obj.col[i][0].green;
+            col_b[i*MAX_FACES_OBJECT] = obj.col[i][0].blue;
+            for (int j=1; j<MAX_FACES_OBJECT; j++) {
+                col_r[i*MAX_FACES_OBJECT+j] = 0;
+                col_g[i*MAX_FACES_OBJECT+j] = 0;
+                col_b[i*MAX_FACES_OBJECT+j] = 0;
+            }
+        } else {
+            for (int j=0; j<MAX_FACES_OBJECT; j++) {
+                col_r[i*MAX_FACES_OBJECT+j] = obj.col[i][j].red;
+                col_g[i*MAX_FACES_OBJECT+j] = obj.col[i][j].green;
+                col_b[i*MAX_FACES_OBJECT+j] = obj.col[i][j].blue;
+            }
+        }
+        for (int j=0; j<MAX_DIMENSIONS_OBJECTS; j++) {
+            if (obj.nb_dim[i] > j) {
+                dimension[i*MAX_DIMENSIONS_OBJECTS+j] = obj.dimension[i][j];
+            } else {
+                dimension[i*MAX_DIMENSIONS_OBJECTS+j] = 0.0;
+            }
+        }
+    }
+    // Copy data that doesn't need to be refetch after initialisation
+    if (cudaMemcpy(gpu_obj_pointers.type, obj.type, sizeof(unsigned char) * NB_OBJECT, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+        printf("Cuda Memcpy failed (to device)\n");
+    }
+    if (cudaMemcpy(gpu_obj_pointers.dimension, dimension, sizeof(float) * NB_OBJECT * MAX_DIMENSIONS_OBJECTS, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+        printf("Cuda Memcpy failed (to device)\n");
+    }
+    if (cudaMemcpy(gpu_obj_pointers.red, col_r, sizeof(unsigned char) * NB_OBJECT * MAX_FACES_OBJECT, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+        printf("Cuda Memcpy failed (to device)\n");
+    }
+    if (cudaMemcpy(gpu_obj_pointers.green, col_g, sizeof(unsigned char) * NB_OBJECT * MAX_FACES_OBJECT, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+        printf("Cuda Memcpy failed (to device)\n");
+    }
+    if (cudaMemcpy(gpu_obj_pointers.blue, col_b, sizeof(unsigned char) * NB_OBJECT * MAX_FACES_OBJECT, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+        printf("Cuda Memcpy failed (to device)\n");
+    }
+    if (cudaMemcpy(gpu_obj_pointers.is_single_color, obj.is_single_color, sizeof(bool) * NB_OBJECT, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+        printf("Cuda Memcpy failed (to device)\n");
+    }
+}
+
+void copy_data_to_video_memory(gpu_object_pointers& gpu_obj_pointers, object_to_gpu& obj) {
+    // Puts positional and rotation data in adequate arrays for GPU
+    float pos_x[NB_OBJECT];
+    float pos_y[NB_OBJECT];
+    float pos_z[NB_OBJECT];
+    float rot_x[NB_OBJECT];
+    float rot_y[NB_OBJECT];
+    float rot_z[NB_OBJECT];
+    for (int i=0; i<NB_OBJECT; i++) {
+        pos_x[i] = obj.pos[i].x;
+        pos_y[i] = obj.pos[i].y;
+        pos_z[i] = obj.pos[i].z;
+        rot_x[i] = obj.rot[i].theta_x;
+        rot_y[i] = obj.rot[i].theta_y;
+        rot_z[i] = obj.rot[i].theta_z;
+    }
+    // Copy positional data which has been computed by the CPU
+    if (cudaMemcpy(gpu_obj_pointers.pos_x, pos_x, sizeof(float) * NB_OBJECT, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+        printf("Cuda Memcpy failed (to device)\n");
+    }
+    if (cudaMemcpy(gpu_obj_pointers.pos_y, pos_y, sizeof(float) * NB_OBJECT, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+        printf("Cuda Memcpy failed (to device)\n");
+    }
+    if (cudaMemcpy(gpu_obj_pointers.pos_z, pos_z, sizeof(float) * NB_OBJECT, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+        printf("Cuda Memcpy failed (to device)\n");
+    }
+    if (cudaMemcpy(gpu_obj_pointers.rot_x, rot_x, sizeof(float) * NB_OBJECT, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+        printf("Cuda Memcpy failed (to device)\n");
+    }
+    if (cudaMemcpy(gpu_obj_pointers.rot_y, rot_y, sizeof(float) * NB_OBJECT, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+        printf("Cuda Memcpy failed (to device)\n");
+    }
+    if (cudaMemcpy(gpu_obj_pointers.rot_z, rot_z, sizeof(float) * NB_OBJECT, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+        printf("Cuda Memcpy failed (to device)\n");
+    }
+}
+
+void copy_data_from_video_memory(image_array& gpu_image, image_array& img) {
+    // Copy image data from video memory
+    if (cudaMemcpy(img.red, gpu_image.red, sizeof(unsigned char) * RESOLUTION, ::cudaMemcpyDeviceToHost)!=cudaSuccess) {
+        printf("Cuda Memcpy failed (to host)\n");
+    }
+    if (cudaMemcpy(img.green, gpu_image.green, sizeof(unsigned char) * RESOLUTION, ::cudaMemcpyDeviceToHost)!=cudaSuccess) {
+        printf("Cuda Memcpy failed (to host)\n");
+    }
+    if (cudaMemcpy(img.blue, gpu_image.blue, sizeof(unsigned char) * RESOLUTION, ::cudaMemcpyDeviceToHost)!=cudaSuccess) {
+        printf("Cuda Memcpy failed (to host)\n");
+    }
+    if (cudaMemcpy(img.alpha, gpu_image.alpha, sizeof(unsigned char) * RESOLUTION, ::cudaMemcpyDeviceToHost)!=cudaSuccess) {
+        printf("Cuda Memcpy failed (to host)\n");
+    }
+}
+
+void clean_video_memory(id_array& gpu_id_array, image_array& gpu_image, gpu_object_pointers& gpu_obj_pointers) {
+    // Allocate references to variables in GPU memory
+    //// GPU only id_array variable
+    if (cudaFree(gpu_id_array.id)!=cudaSuccess) {
+        printf("Cuda Free Failed\n");
+    }
+    if (cudaFree(gpu_id_array.side)!=cudaSuccess) {
+        printf("Cuda Free Failed\n");
+    }
+    //// GPU Image variable
+    if (cudaFree(gpu_image.red)!=cudaSuccess) {
+        printf("Cuda Free Failed\n");
+    }
+    if (cudaFree(gpu_image.green)!=cudaSuccess) {
+        printf("Cuda Free Failed\n");
+    }
+    if (cudaFree(gpu_image.blue)!=cudaSuccess) {
+        printf("Cuda Free Failed\n");
+    }
+    if (cudaFree(gpu_image.alpha)!=cudaSuccess) {
+        printf("Cuda Free Failed\n");
+    }
+    //// GPU objects variable allocation
+    if (cudaFree(gpu_obj_pointers.type)!=cudaSuccess) {
+        printf("Cuda Free Failed\n");
+    }
+    if (cudaFree(gpu_obj_pointers.pos_x)!=cudaSuccess) {
+        printf("Cuda Free Failed\n");
+    }
+    if (cudaFree(gpu_obj_pointers.pos_y)!=cudaSuccess) {
+        printf("Cuda Free Failed\n");
+    }
+    if (cudaFree(gpu_obj_pointers.pos_z)!=cudaSuccess) {
+        printf("Cuda Free Failed\n");
+    }
+    if (cudaFree(gpu_obj_pointers.rot_x)!=cudaSuccess) {
+        printf("Cuda Free Failed\n");
+    }
+    if (cudaFree(gpu_obj_pointers.rot_y)!=cudaSuccess) {
+        printf("Cuda Free Failed\n");
+    }
+    if (cudaFree(gpu_obj_pointers.rot_z)!=cudaSuccess) {
+        printf("Cuda Free Failed\n");
+    }
+    if (cudaFree(gpu_obj_pointers.dimension)!=cudaSuccess) {
+        printf("Cuda Free Failed\n");
+    }
+    if (cudaFree(gpu_obj_pointers.red)!=cudaSuccess) {
+        printf("Cuda Free Failed\n");
+    }
+    if (cudaFree(gpu_obj_pointers.green)!=cudaSuccess) {
+        printf("Cuda Free Failed\n");
+    }
+    if (cudaFree(gpu_obj_pointers.blue)!=cudaSuccess) {
+        printf("Cuda Free Failed\n");
+    }
+    if (cudaFree(gpu_obj_pointers.is_single_color)!=cudaSuccess) {
+        printf("Cuda Free Failed\n");
+    }
+}
 
 //------------------------------------------------------------------------------------------//
-// General Functions
+// CPU Functions (Block/Thread allocation management)
 //------------------------------------------------------------------------------------------//
-float dist2D(float A_x, float A_y, float B_x, float B_y) {
+bool allocate_gpu_thread(dim3& numBlocks, dim3& threadsPerBlock) {
+    if (RESOLUTION <= 1024) {
+        numBlocks.x = 1;
+        numBlocks.y = 1;
+        threadsPerBlock.x = IMAGE_RESOLUTION_HEIGHT;
+        threadsPerBlock.y = IMAGE_RESOLUTION_WIDTH;
+    } else {
+        if ((IMAGE_RESOLUTION_HEIGHT%32 == 0) and (IMAGE_RESOLUTION_WIDTH%32 == 0)) {
+            numBlocks.x = IMAGE_RESOLUTION_HEIGHT/32;
+            numBlocks.y = IMAGE_RESOLUTION_WIDTH/32;
+            threadsPerBlock.x = 32;
+            threadsPerBlock.y = 32;
+        } else {
+            printf("Resolutions that are not a multiple of 32 are not supported yet\n");
+            return 1;
+        }
+    }
+    numBlocks.z = 1;
+    numBlocks.z = 1;
+    return 0;
+}
+
+//------------------------------------------------------------------------------------------//
+// GPU Functions (General Geometry functions)
+//------------------------------------------------------------------------------------------//
+__device__ float dist2D(float A_x, float A_y, float B_x, float B_y) {
     float dx = B_x - A_x;
     float dy = B_y - A_y;
     return sqrt(dx * dx + dy * dy);
 }
 
-float dist3D(position A, position B) {
-    float dx = B.x - A.x;
-    float dy = B.y - A.y;
-    float dz = B.z - A.z;
+__device__ float dist3D(float A_x, float A_y, float A_z, float B_x, float B_y, float B_z) {
+    float dx = B_x - A_x;
+    float dy = B_y - A_y;
+    float dz = B_z - A_z;
     return sqrt(dx * dx + dy * dy + dz * dz);
 }
 
-float squareDist2D(float A_x, float A_y, float B_x, float B_y) {
+__device__ float squareDist2D(float A_x, float A_y, float B_x, float B_y) {
     float dx = B_x - A_x;
     float dy = B_y - A_y;
     return dx * dx + dy * dy;
 }
 
-void rotate2D_x(float& new_y, float& new_z, float old_y, float old_z, float theta) {
+__device__ void rotate2D_x(float& new_y, float& new_z, float old_y, float old_z, float theta) {
     new_y = old_y * cos(theta) - old_z * sin(theta);
     new_z = old_y * sin(theta) + old_z * cos(theta);
 }
 
-void rotate2D_y(float& new_x, float& new_z, float old_x, float old_z, float theta) {
+__device__ void rotate2D_y(float& new_x, float& new_z, float old_x, float old_z, float theta) {
     new_z = old_z * cos(theta) - old_x * sin(theta);
     new_x = old_z * sin(theta) + old_x * cos(theta);
 }
 
-void rotate2D_z(float& new_x, float& new_y, float old_x, float old_y, float theta) {
+__device__ void rotate2D_z(float& new_x, float& new_y, float old_x, float old_y, float theta) {
     new_x = old_x * cos(theta) - old_y * sin(theta);
     new_y = old_x * sin(theta) + old_y * cos(theta);
 }
 
-position rotate3D(position pos, rotation rot, position pos_center) {
-    position new_pos;
-    rotate2D_x(new_pos.y, new_pos.z, pos.y, pos.z, rot.theta_x);
-    rotate2D_y(new_pos.x, new_pos.z, pos.x, new_pos.z, rot.theta_y);
-    rotate2D_z(new_pos.x, new_pos.y, new_pos.x, new_pos.y, rot.theta_z);
-    return new_pos;
+__device__ void rotate3D(position& new_pos, position pos
+                       , float theta_x, float theta_y, float theta_z) {
+    rotate2D_x(new_pos.y, new_pos.z, pos.y, pos.z, theta_x);
+    rotate2D_y(new_pos.x, new_pos.z, pos.x, new_pos.z, theta_y);
+    rotate2D_z(new_pos.x, new_pos.y, new_pos.x, new_pos.y, theta_z);
 }
 
-bool belongs_2D_4side_convex_polygone(float x, float y, position A0, position A1, position A2, position A3, float D) {
+__device__ bool belongs_2D_4side_convex_polygone(float x, float y, position A0, position A1, position A2, position A3, float D) {
     float det1 = (A1.x - A0.x) * (y - A0.y) - (A1.y - A0.y) * (x - A0.x);
     float det2 = (A2.x - A1.x) * (y - A1.y) - (A2.y - A1.y) * (x - A1.x);
     if (det1 * det2 <= 0) return false;
@@ -75,7 +324,7 @@ bool belongs_2D_4side_convex_polygone(float x, float y, position A0, position A1
     else return true;
 }
 
-bool belongs_2D_4side_convex_polygone_with_sides(float x, float y, position A0, position A1, position A2, position A3, float D) {
+__device__ bool belongs_2D_4side_convex_polygone_with_sides(float x, float y, position A0, position A1, position A2, position A3, float D) {
     // Point is equal to one of the points of the polygon
     if (x == A0.x and y == A0.y) return true;
     if (x == A1.x and y == A1.y) return true;
@@ -108,8 +357,13 @@ bool belongs_2D_4side_convex_polygone_with_sides(float x, float y, position A0, 
     return true;
 }
 
-
-int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) {
+//------------------------------------------------------------------------------------------//
+// GPU Functions (Object detection)
+//------------------------------------------------------------------------------------------//
+__device__ int is_in_cube(float x, float y
+                        , float pos_x, float pos_y, float pos_z
+                        , float rot_x, float rot_y, float rot_z
+                        , float* dimensions) {
     // Compute positions of cube summits
     //    E----F
     //   /    /|
@@ -120,66 +374,66 @@ int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) 
     A.x = -dimensions[0]/2.0;
     A.y = -dimensions[0]/2.0;
     A.z = -dimensions[0]/2.0;
-    A = rotate3D(A, rot, pos);
-    A.x += pos.x;
-    A.y += pos.y;
-    A.z += pos.z;
+    rotate3D(A, A, rot_x, rot_y, rot_z);
+    A.x += pos_x;
+    A.y += pos_y;
+    A.z += pos_z;
     position B;
     B.x = dimensions[0]/2.0;
     B.y = -dimensions[0]/2.0;
     B.z = -dimensions[0]/2.0;
-    B = rotate3D(B, rot, pos);
-    B.x += pos.x;
-    B.y += pos.y;
-    B.z += pos.z;
+    rotate3D(B, B, rot_x, rot_y, rot_z);
+    B.x += pos_x;
+    B.y += pos_y;
+    B.z += pos_z;
     position C;
     C.x = dimensions[0]/2.0;
     C.y = dimensions[0]/2.0;
     C.z = -dimensions[0]/2.0;
-    C = rotate3D(C, rot, pos);
-    C.x += pos.x;
-    C.y += pos.y;
-    C.z += pos.z;
+    rotate3D(C, C, rot_x, rot_y, rot_z);
+    C.x += pos_x;
+    C.y += pos_y;
+    C.z += pos_z;
     position D;
     D.x = -dimensions[0]/2.0;
     D.y = +dimensions[0]/2.0;
     D.z = -dimensions[0]/2.0;
-    D = rotate3D(D, rot, pos);
-    D.x += pos.x;
-    D.y += pos.y;
-    D.z += pos.z;
+    rotate3D(D, D, rot_x, rot_y, rot_z);
+    D.x += pos_x;
+    D.y += pos_y;
+    D.z += pos_z;
     position E;
     E.x = -dimensions[0]/2.0;
     E.y = -dimensions[0]/2.0;
     E.z = dimensions[0]/2.0;
-    E = rotate3D(E, rot, pos);
-    E.x += pos.x;
-    E.y += pos.y;
-    E.z += pos.z;
+    rotate3D(E, E, rot_x, rot_y, rot_z);
+    E.x += pos_x;
+    E.y += pos_y;
+    E.z += pos_z;
     position F;
     F.x = dimensions[0]/2.0;
     F.y = -dimensions[0]/2.0;
     F.z = dimensions[0]/2.0;
-    F = rotate3D(F, rot, pos);
-    F.x += pos.x;
-    F.y += pos.y;
-    F.z += pos.z;
+    rotate3D(F, F, rot_x, rot_y, rot_z);
+    F.x += pos_x;
+    F.y += pos_y;
+    F.z += pos_z;
     position G;
     G.x = dimensions[0]/2.0;
     G.y = dimensions[0]/2.0;
     G.z = dimensions[0]/2.0;
-    G = rotate3D(G, rot, pos);
-    G.x += pos.x;
-    G.y += pos.y;
-    G.z += pos.z;
+    rotate3D(G, G, rot_x, rot_y, rot_z);
+    G.x += pos_x;
+    G.y += pos_y;
+    G.z += pos_z;
     position H;
     H.x = -dimensions[0]/2.0;
     H.y = dimensions[0]/2.0;
     H.z = dimensions[0]/2.0;
-    H = rotate3D(H, rot, pos);
-    H.x += pos.x;
-    H.y += pos.y;
-    H.z += pos.z;
+    rotate3D(H, H, rot_x, rot_y, rot_z);
+    H.x += pos_x;
+    H.y += pos_y;
+    H.z += pos_z;
     // Compute belonging in front or back plan
     float front_z = (A.z + B.z + C.z + D.z)/4.0;
     float back_z = (E.z + F.z + G.z + H.z)/4.0;
@@ -225,16 +479,19 @@ int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) 
     return -1;
 }
 
-bool is_in_sphere(float x, float y, position pos, float* dimensions) {
-    return (squareDist2D(x, y, pos.x, pos.y) <= dimensions[0]*dimensions[0]);
+__device__ bool is_in_sphere(float x, float y, float pos_x, float pos_y, float pos_z, float* dimensions) {
+    return (squareDist2D(x, y, pos_x, pos_y) <= dimensions[0]*dimensions[0]);
 }
 
-int is_in_object(float x, float y, unsigned char id, position pos, rotation rot, float* dimensions) {
+__device__ int is_in_object(float x, float y, unsigned char id
+                          , float pos_x, float pos_y, float pos_z
+                          , float rot_x, float rot_y, float rot_z
+                          , float* dimensions) {
     bool side;
     if (id == CUBE) {
-        return is_in_cube(x, y, pos, rot, dimensions);
+        return is_in_cube(x, y, pos_x, pos_y, pos_z, rot_x, rot_y, rot_z, dimensions);
     } else if (id == SPHERE) {
-        side = is_in_sphere(x, y, pos, dimensions);
+        side = is_in_sphere(x, y, pos_x, pos_y, pos_z, dimensions);
         if (side == true) return 0;
         else return -1;
     } else {
@@ -242,65 +499,78 @@ int is_in_object(float x, float y, unsigned char id, position pos, rotation rot,
     }
 }
 
-void update_identifiers(object_to_gpu& tab_pos, id_array& identifier_array) {
-    for(int height=0; height<IMAGE_RESOLUTION_HEIGHT; height++) {
-        for(int width=0; width<IMAGE_RESOLUTION_WIDTH; width++) {
-            float x = IMAGE_OFFSET_WIDTH + PIXEL_WIDTH_SIZE/2.0 + ((float) width) * PIXEL_WIDTH_SIZE;
-            float y = IMAGE_OFFSET_HEIGHT + PIXEL_HEIGHT_SIZE/2.0 + ((float) height) * PIXEL_HEIGHT_SIZE;
-            identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = -1;
-            identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = -1;
-            for(int i=0; i<NB_OBJECT; i++) {
-                int is_in = is_in_object(x, y, tab_pos.type[i], tab_pos.pos[i], tab_pos.rot[i], tab_pos.dimension[i]);
-                if (is_in != -1) {
-                    if (identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] != -1) {
-                        if (tab_pos.pos[i].z < tab_pos.pos[identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width]].z) {
-                            identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = i;
-                            identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = is_in;
-                        }
-                    } else {
-                        identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = i;
-                        identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = is_in;
-                    }
-                }
-            }
-        }
-    }
-}
-
-colors get_colors(int id, int side, object_to_gpu& tab_pos) {
+//------------------------------------------------------------------------------------------//
+// GPU Functions (Color related)
+//------------------------------------------------------------------------------------------//
+__device__ colors get_colors(int id, int side, gpu_object_pointers& gpu_obj_pointers) {
     colors col;
     col.red = 0;
     col.green = 0;
     col.blue = 0;
     if (id == -1) return col;
     else {
-        if (tab_pos.is_single_color[id] == true) {
-            col.red = tab_pos.col[id][0].red;
-            col.green = tab_pos.col[id][0].green;
-            col.blue = tab_pos.col[id][0].blue;
+        if (gpu_obj_pointers.is_single_color[id] == true) {
+            col.red = gpu_obj_pointers.red[id*MAX_FACES_OBJECT];
+            col.green = gpu_obj_pointers.green[id*MAX_FACES_OBJECT];
+            col.blue = gpu_obj_pointers.blue[id*MAX_FACES_OBJECT];
         } else {
-            col.red = tab_pos.col[id][side].red;
-            col.green = tab_pos.col[id][side].green;
-            col.blue = tab_pos.col[id][side].blue;
+            col.red = gpu_obj_pointers.red[id*MAX_FACES_OBJECT+side];
+            col.green = gpu_obj_pointers.green[id*MAX_FACES_OBJECT+side];
+            col.blue = gpu_obj_pointers.blue[id*MAX_FACES_OBJECT+side];
         }
         return col;
     }
 }
 
-void update_image(id_array& identifier_array, object_to_gpu& tab_pos, image_array& image) {
-    for(int height=0; height<IMAGE_RESOLUTION_HEIGHT; height++) {
-        for(int width=0; width<IMAGE_RESOLUTION_WIDTH; width++) {
-            colors col;
-            col = get_colors(identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width], identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width], tab_pos);
-            image.red[height*IMAGE_RESOLUTION_WIDTH + width] = col.red;
-            image.green[height*IMAGE_RESOLUTION_WIDTH + width] = col.green;
-            image.blue[height*IMAGE_RESOLUTION_WIDTH + width] = col.blue;
-            image.alpha[height*IMAGE_RESOLUTION_WIDTH + width] = 0;
+//------------------------------------------------------------------------------------------//
+// GPU Functions (Scene rendering)
+//------------------------------------------------------------------------------------------//
+__global__ void update_identifiers(gpu_object_pointers gpu_obj_pointers, id_array identifier_array) {
+    int height = blockIdx.x * blockDim.x + threadIdx.x;
+    int width = blockIdx.y * blockDim.y + threadIdx.y;
+    float x = IMAGE_OFFSET_WIDTH + PIXEL_WIDTH_SIZE/2.0 + ((float) width) * PIXEL_WIDTH_SIZE;
+    float y = IMAGE_OFFSET_HEIGHT + PIXEL_HEIGHT_SIZE/2.0 + ((float) height) * PIXEL_HEIGHT_SIZE;
+    identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = -1;
+    identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = -1;
+    for(int i=0; i<NB_OBJECT; i++) {
+        float dim[MAX_DIMENSIONS_OBJECTS];
+        for (int j=0; j<MAX_DIMENSIONS_OBJECTS; j++) {
+            dim[j] = gpu_obj_pointers.dimension[i*MAX_DIMENSIONS_OBJECTS+j];
+        }
+        int is_in = is_in_object(x, y, gpu_obj_pointers.type[i]
+                               , gpu_obj_pointers.pos_x[i], gpu_obj_pointers.pos_y[i], gpu_obj_pointers.pos_z[i]
+                               , gpu_obj_pointers.rot_x[i], gpu_obj_pointers.rot_y[i], gpu_obj_pointers.rot_z[i]
+                               , dim);
+        if (is_in != -1) {
+            if (identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] != -1) {
+                if (gpu_obj_pointers.pos_z[i] < gpu_obj_pointers.pos_z[identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width]]) {
+                    identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = i;
+                    identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = is_in;
+                }
+            } else {
+                identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = i;
+                identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = is_in;
+            }
         }
     }
 }
 
-void print_identifier_array(id_array& identifier_array) {
+__global__ void update_image(id_array identifier_array, gpu_object_pointers gpu_obj_pointers, image_array image) {
+    int height = blockIdx.x * blockDim.x + threadIdx.x;
+    int width = blockIdx.y * blockDim.y + threadIdx.y;
+    colors col = get_colors(identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width], identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width], gpu_obj_pointers);
+    image.red[height*IMAGE_RESOLUTION_WIDTH + width] = col.red;
+    image.green[height*IMAGE_RESOLUTION_WIDTH + width] = col.green;
+    image.blue[height*IMAGE_RESOLUTION_WIDTH + width] = col.blue;
+    image.alpha[height*IMAGE_RESOLUTION_WIDTH + width] = 0;
+
+}
+
+
+//------------------------------------------------------------------------------------------//
+// GPU Functions (Debug)
+//------------------------------------------------------------------------------------------//
+__global__ void print_identifier_array(id_array identifier_array) {
     for(int height=0; height<IMAGE_RESOLUTION_HEIGHT; height++) {
         printf(" ");
         for(int width=0; width<IMAGE_RESOLUTION_WIDTH; width++) {
@@ -321,37 +591,24 @@ void print_identifier_array(id_array& identifier_array) {
     }
 }
 
-void reinit_terminal() {
-    // Clear message from BMP image
-    printf("\x1b[1F"); // Move to beginning of previous line
-    printf("\x1b[2K"); // Clear entire line
-    // Clear """image""" from identifiers
-    for(int height=0; height<IMAGE_RESOLUTION_HEIGHT; height++) {
-        printf("\x1b[1F"); // Move to beginning of previous line
-        printf("\x1b[2K"); // Clear entire line
-    }
-}
-
 //------------------------------------------------------------------------------------------//
 // Draw image function
 //------------------------------------------------------------------------------------------//
-void draw_image(object_to_gpu& tab_pos, image_array& image) {
-    // Array of 2D Object identifier (0 : index of object, 1 : hit side)
-    id_array identifier_array;
-    identifier_array.id = new int[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
-    identifier_array.side = new int[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
+void draw_image(object_to_gpu& tab_pos, image_array& image
+              , id_array& identifier_array, image_array& gpu_image, gpu_object_pointers& gpu_obj_pointers
+              , dim3 numBlocks, dim3 threadsPerBlock) {
+    // Copy data to video memory
+    copy_data_to_video_memory(gpu_obj_pointers, tab_pos);
 
     // Compute which object is visible (and which face can we see) for each pixel
-    update_identifiers(tab_pos, identifier_array);
-
-    // """Image preview"""
-    if (DEBUG_VALUES and IMAGE_RESOLUTION_HEIGHT<32 and IMAGE_RESOLUTION_WIDTH<32) {
-        print_identifier_array(identifier_array);
-        reinit_terminal();
-    }
+    update_identifiers<<<numBlocks, threadsPerBlock>>>(gpu_obj_pointers, identifier_array);
+    //print_identifier_array<<<1, 1>>>(identifier_array);
 
     // Assigns colors to each pixel, simply based on which object is visible (no light computations)
-    update_image(identifier_array, tab_pos, image);
+    update_image<<<numBlocks, threadsPerBlock>>>(identifier_array, gpu_obj_pointers, gpu_image);
+
+    // Copy data from video memory
+    copy_data_from_video_memory(gpu_image, image);
 }
 
 //------------------------------------------------------------------------------------------//
@@ -379,6 +636,7 @@ int main (int argc, char** argv) {
     tab_pos.rot[0].theta_x = 0.0;
     tab_pos.rot[0].theta_y = 0.0;
     tab_pos.rot[0].theta_z = 0.0;
+    tab_pos.nb_dim[0] = 1;
     tab_pos.dimension[0][0] = 50.0;
     tab_pos.is_single_color[0] = true;
     tab_pos.col[0][0].red = 255;
@@ -393,6 +651,7 @@ int main (int argc, char** argv) {
     tab_pos.rot[1].theta_x = 0.0;
     tab_pos.rot[1].theta_y = 0.0;
     tab_pos.rot[1].theta_z = 0.0;
+    tab_pos.nb_dim[1] = 1;
     tab_pos.dimension[1][0] = 100.0;
     tab_pos.is_single_color[1] = true;
     tab_pos.col[1][0].red = 255;
@@ -407,6 +666,7 @@ int main (int argc, char** argv) {
     tab_pos.rot[2].theta_x = 0.0;
     tab_pos.rot[2].theta_y = 0.0;
     tab_pos.rot[2].theta_z = 0.0;
+    tab_pos.nb_dim[2] = 1;
     tab_pos.dimension[2][0] = 200.0;
     tab_pos.is_single_color[2] = true;
     tab_pos.col[2][0].red = 0;
@@ -421,6 +681,7 @@ int main (int argc, char** argv) {
     tab_pos.rot[3].theta_x = 0.0;
     tab_pos.rot[3].theta_y = 0.0;
     tab_pos.rot[3].theta_z = 0.0;
+    tab_pos.nb_dim[3] = 1;
     tab_pos.dimension[3][0] = 150.0;
     tab_pos.is_single_color[3] = true;
     tab_pos.col[3][0].red = 0;
@@ -435,6 +696,7 @@ int main (int argc, char** argv) {
     tab_pos.rot[4].theta_x = 0.0;
     tab_pos.rot[4].theta_y = 0.0;
     tab_pos.rot[4].theta_z = 0.0;
+    tab_pos.nb_dim[4] = 1;
     tab_pos.dimension[4][0] = 400.0;
     tab_pos.is_single_color[4] = false;
     //// Top
@@ -464,12 +726,21 @@ int main (int argc, char** argv) {
 
     // Test image arrays
     image_array image;
-    image.red = new unsigned char[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
-    image.green = new unsigned char[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
-    image.blue = new unsigned char[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
-    image.alpha = new unsigned char[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
+    image.red = new unsigned char[RESOLUTION];
+    image.green = new unsigned char[RESOLUTION];
+    image.blue = new unsigned char[RESOLUTION];
+    image.alpha = new unsigned char[RESOLUTION];
 
-    printf("Waiting to start\n");
+    // Video Memory initialisation
+    dim3 numBlocks, threadsPerBlock;
+    id_array gpu_id_array;
+    image_array gpu_image;
+    gpu_object_pointers gpu_obj_pointers;
+    if (allocate_gpu_thread(numBlocks, threadsPerBlock)) return 1;
+    initiate_video_memory(gpu_id_array, gpu_image, gpu_obj_pointers);
+    copy_initial_data_to_video_memory(gpu_obj_pointers, tab_pos);
+
+    printf("Initialisation finished, Waiting to start\n");
     sleep(5);
 
     auto after_init = std::chrono::high_resolution_clock::now();
@@ -483,7 +754,7 @@ int main (int argc, char** argv) {
         if (DEBUG_PERF) {
             before_image_draw = std::chrono::high_resolution_clock::now();
         }
-        draw_image(tab_pos, image);
+        draw_image(tab_pos, image, gpu_id_array, gpu_image, gpu_obj_pointers, numBlocks, threadsPerBlock);
         if (DEBUG_PERF) {
             auto after_image_draw = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> temp = after_image_draw - before_image_draw;
@@ -545,4 +816,5 @@ int main (int argc, char** argv) {
         printf("Mean FPS : %f\n", 1000.0 * ((float) RENDERED_FRAMES)/mean_time);
         printf("-------------------------------------------------\n");
     }
+    clean_video_memory(gpu_id_array, gpu_image, gpu_obj_pointers);
 }

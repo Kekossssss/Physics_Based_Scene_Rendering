@@ -60,6 +60,24 @@
 #define SPHERE 1
 
 //------------------------------------------------------------------------------------------//
+// GPU memory pointers structure
+//------------------------------------------------------------------------------------------//
+struct gpu_object_pointers {
+    unsigned char* type;
+    float* pos_x;
+    float* pos_y;
+    float* pos_z;
+    float* rot_x;
+    float* rot_y;
+    float* rot_z;
+    float* dimension;
+    bool* is_single_color;
+    unsigned char* red;
+    unsigned char* green;
+    unsigned char* blue;
+};
+
+//------------------------------------------------------------------------------------------//
 // Structures definition
 //------------------------------------------------------------------------------------------//
 // Structure to simplify the access to the position of an object
@@ -94,6 +112,7 @@ struct object_to_gpu {
     unsigned char type[NB_OBJECT]; // Object type
     position pos[NB_OBJECT];
     rotation rot[NB_OBJECT];
+    int nb_dim[NB_OBJECT];
     float dimension[NB_OBJECT][MAX_DIMENSIONS_OBJECTS]; //Table of the dimensions for each kind of shape, use a function to assign each index to it's corresponding dimension according to the kind of shape
     bool is_single_color[NB_OBJECT];
     colors col[NB_OBJECT][MAX_FACES_OBJECT]; // Follows the following logic for assigning colors : Top -> Bottom of the shape, Right -> Left of the shape, Front -> Back of the shape
