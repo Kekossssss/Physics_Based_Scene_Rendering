@@ -12,6 +12,8 @@
 // Library used for sleep function
 #include <unistd.h>
 
+#define RENDERED_FRAMES 100
+
 //------------------------------------------------------------------------------------------//
 // GPU Functions (Scene rendering)
 //------------------------------------------------------------------------------------------//
@@ -353,7 +355,15 @@ void draw_image(object_to_gpu tab_pos, image_array& image) {
 // Main
 //------------------------------------------------------------------------------------------//
 int main (int argc, char** argv) {
+    // Performance debug values
     auto start = std::chrono::high_resolution_clock::now();
+    std::chrono::_V2::system_clock::time_point before_image_draw;
+    double time_table[RENDERED_FRAMES];
+    int index_min_time;
+    double min_time = std::numeric_limits<double>::infinity();
+    int index_max_time;
+    double max_time = 0.0;
+    double mean_time = 0.0;
 
     // Test objects positions
     object_to_gpu tab_pos;
@@ -455,16 +465,45 @@ int main (int argc, char** argv) {
     printf("Waiting to start\n");
     sleep(5);
 
-    for (int i=0; i<100; i++) {
+    auto after_init = std::chrono::high_resolution_clock::now();
+    if (DEBUG_PERF) {
+        std::chrono::duration<double, std::milli> duration_after_init = after_init - start;
+        printf("Execution time after initialisation: %f ms\n", duration_after_init.count());
+    }
+    printf("--------------Start Rendering---------------\n");
+    for (int i=0; i<RENDERED_FRAMES; i++) {
         // Main function to use in order to draw an image from the set of objects
+        if (DEBUG_PERF) {
+            before_image_draw = std::chrono::high_resolution_clock::now();
+        }
         draw_image(tab_pos, image);
-
-        if (save_as_bmp(image, "test_image.bmp")) {
-            std::cout << "BMP Image " << i << " succesfully created !" << std::endl;
-            printf("\x1b[1F"); // Move to beginning of previous line
-            printf("\x1b[2K"); // Clear entire line
+        if (DEBUG_PERF) {
+            auto after_image_draw = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double, std::milli> temp = after_image_draw - before_image_draw;
+            time_table[i] = temp.count();
+            if (i>0) {
+                printf("\x1b[1F"); // Move to beginning of previous line
+                printf("\x1b[2K"); // Clear entire line
+            }
+            printf("Image %d / %d took %f ms to render\n", i+1, RENDERED_FRAMES, time_table[i]);
+            mean_time += time_table[i];
+            if (min_time > time_table[i]) {
+                min_time = time_table[i];
+                index_min_time = i;
+            }
+            if (max_time < time_table[i]) {
+                max_time = time_table[i];
+                index_max_time = i;
+            }
         }
 
+        // Image output temporary function
+        if (save_as_bmp(image, "test_image.bmp") == false) {
+            printf("Image saving error, leaving loop\n");
+            break;
+        }
+
+        // Temporary positions updates for testing rendering techniques
         tab_pos.pos[0].x += 40.0;
         tab_pos.pos[0].y += 40.0;
         tab_pos.pos[1].y += 40.0;
@@ -477,5 +516,25 @@ int main (int argc, char** argv) {
         tab_pos.rot[4].theta_z += 0.1;
 
         //usleep(100000);
-    }    
+    }
+    printf("--------------End of Rendering--------------\n");
+
+    // Output performance metrics
+    printf("\n--------------Run Parameters Recap---------------\n");
+    printf("Image resolution : %d * %d\n", IMAGE_RESOLUTION_WIDTH, IMAGE_RESOLUTION_HEIGHT);
+    printf("Number of objects in simulation : %d\n", NB_OBJECT);
+    printf("Number of rendered frames : %d\n", RENDERED_FRAMES);
+    printf("-------------------------------------------------\n");
+
+    auto end = std::chrono::high_resolution_clock::now();
+    if (DEBUG_PERF) {
+        std::chrono::duration<double, std::milli> duration_end = end - start;
+        printf("\n--------------Performance Metrics---------------\n");
+        printf("Total execution time: %f ms\n", duration_end.count());
+        printf("Mean image drawing time : %f ms\n", mean_time/((float) RENDERED_FRAMES));
+        printf("Maximum image drawing time (%d): %f\n", index_max_time, max_time);
+        printf("Minimum image drawing time (%d): %f\n", index_min_time, min_time);
+        printf("Mean FPS : %f\n", 1000.0 * ((float) RENDERED_FRAMES)/mean_time);
+        printf("-------------------------------------------------\n");
+    }
 }
