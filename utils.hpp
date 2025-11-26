@@ -11,7 +11,7 @@
 //------------------------------------------------------------------------------------------//
 // Configurable DEBUG parameters
 #define DEBUG_PERF true
-#define DEBUG_VALUES false
+#define DEBUG_VALUES true
 
 // Images resolution for the GPU to render
 #define IMAGE_RESOLUTION_WIDTH 500

@@ -1,3 +1,4 @@
+GCCFLAGS := -std=c++17 -O3
 NVFLAGS := -std=c++17 -O3
 TARGET := main
 
@@ -12,6 +13,12 @@ all: gpu_exec
 
 gpu_exec: gpu_part.cu
 	nvcc $(NVFLAGS) -o gpu_exec gpu_part.cu
+
+.PHONY: cpu
+all: cpu_renderer
+
+cpu_renderer: cpu_renderer.cpp
+	g++ $(GCCFLAGS) -o cpu_renderer cpu_renderer.cpp	
 
 clean:
 	rm -rf main *.o

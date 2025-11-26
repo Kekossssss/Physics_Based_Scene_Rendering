@@ -3,7 +3,6 @@
 //------------------------------------------------------------------------------------------//
 // Librairies
 //------------------------------------------------------------------------------------------//
-#include "cuda.h"
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -12,10 +11,7 @@
 // Library used for sleep function
 #include <unistd.h>
 
-//------------------------------------------------------------------------------------------//
-// GPU Functions (Scene rendering)
-//------------------------------------------------------------------------------------------//
-
+#define RENDERED_FRAMES 100
 
 //------------------------------------------------------------------------------------------//
 // General Functions
@@ -455,16 +451,28 @@ int main (int argc, char** argv) {
     printf("Waiting to start\n");
     sleep(5);
 
-    for (int i=0; i<100; i++) {
+    auto after_init = std::chrono::high_resolution_clock::now();
+    if (DEBUG_PERF) {
+        std::chrono::duration<double, std::milli> duration_after_init = after_init - start;
+        printf("Execution time after initialisation: %f ms\n", duration_after_init.count());
+    }
+    printf("--------------Start Rendering--------------\n");
+    for (int i=0; i<RENDERED_FRAMES; i++) {
         // Main function to use in order to draw an image from the set of objects
         draw_image(tab_pos, image);
 
+        // Image output temporary function
         if (save_as_bmp(image, "test_image.bmp")) {
-            std::cout << "BMP Image " << i << " succesfully created !" << std::endl;
-            printf("\x1b[1F"); // Move to beginning of previous line
-            printf("\x1b[2K"); // Clear entire line
+            if (DEBUG_VALUES) {
+                if (i>0) {
+                    printf("\x1b[1F"); // Move to beginning of previous line
+                    printf("\x1b[2K"); // Clear entire line
+                }
+                std::cout << "BMP Image " << i << " succesfully created !" << std::endl;
+            }
         }
 
+        // Temporary positions updates for testing rendering techniques
         tab_pos.pos[0].x += 40.0;
         tab_pos.pos[0].y += 40.0;
         tab_pos.pos[1].y += 40.0;
@@ -477,5 +485,16 @@ int main (int argc, char** argv) {
         tab_pos.rot[4].theta_z += 0.1;
 
         //usleep(100000);
-    }    
+    }
+    printf("--------------End of Rendering--------------\n");
+
+    // Output performance metrics
+    auto end = std::chrono::high_resolution_clock::now();
+    if (DEBUG_PERF) {
+        std::chrono::duration<double, std::milli> duration_end = end - start;
+        printf("Total execution time: %f ms\n", duration_end.count());
+        std::chrono::duration<double, std::milli> duration_draw = end - after_init;
+        printf("Mean image drawing time : %f ms\n", duration_draw.count()/((float) RENDERED_FRAMES));
+        printf("Mean FPS : %f\n", 1000.0 * ((float) RENDERED_FRAMES)/duration_draw.count());
+    } 
 }
