@@ -325,11 +325,13 @@ __device__ bool belongs_2D_4side_convex_polygone(float x, float y, position A0, 
 }
 
 __device__ bool belongs_2D_4side_convex_polygone_with_sides(float x, float y, position A0, position A1, position A2, position A3, float D) {
+    bool result_bypass;
+    bool result = true;
     // Point is equal to one of the points of the polygon
-    if (x == A0.x and y == A0.y) return true;
-    if (x == A1.x and y == A1.y) return true;
-    if (x == A2.x and y == A2.y) return true;
-    if (x == A3.x and y == A3.y) return true;
+    result_bypass = (x == A0.x and y == A0.y);
+    result_bypass = result_bypass or (x == A1.x and y == A1.y);
+    result_bypass = result_bypass or (x == A2.x and y == A2.y);
+    result_bypass = result_bypass or (x == A3.x and y == A3.y);
     // Check if it is inside/on the sides
     float det1 = (A1.x - A0.x) * (y - A0.y) - (A1.y - A0.y) * (x - A0.x);
     float det2 = (A2.x - A1.x) * (y - A1.y) - (A2.y - A1.y) * (x - A1.x);
@@ -337,24 +339,24 @@ __device__ bool belongs_2D_4side_convex_polygone_with_sides(float x, float y, po
     float det4 = (A0.x - A3.x) * (y - A3.y) - (A0.y - A3.y) * (x - A3.x);
     // Point is on the sides
     if (det1 == 0.0) {
-        if (det2 * det3 <= 0) return false;
-        if (det3 * det4 <= 0) return false;
+        if (det2 * det3 <= 0) result = false;
+        if (det3 * det4 <= 0) result = false;
     } else if (det2 == 0.0) {
-        if (det1 * det3 <= 0) return false;
-        if (det3 * det4 <= 0) return false;
+        if (det1 * det3 <= 0) result = false;
+        if (det3 * det4 <= 0) result = false;
     } else if (det3 == 0.0) {
-        if (det1 * det2 <= 0) return false;
-        if (det2 * det4 <= 0) return false;
+        if (det1 * det2 <= 0) result = false;
+        if (det2 * det4 <= 0) result = false;
     } else if (det4 == 0.0) {
-        if (det1 * det2 <= 0) return false;
-        if (det2 * det3 <= 0) return false;
+        if (det1 * det2 <= 0) result = false;
+        if (det2 * det3 <= 0) result = false;
     // Point is inside
     } else {
-        if (det1 * det2 < 0) return false;
-        if (det2 * det3 < 0) return false;
-        if (det3 * det4 < 0) return false;
+        if (det1 * det2 < 0) result = false;
+        if (det2 * det3 < 0) result = false;
+        if (det3 * det4 < 0) result = false;
     }
-    return true;
+    return (result_bypass or result);
 }
 
 //------------------------------------------------------------------------------------------//
@@ -479,8 +481,8 @@ __device__ int is_in_cube(float x, float y
     return -1;
 }
 
-__device__ bool is_in_sphere(float x, float y, float pos_x, float pos_y, float pos_z, float* dimensions) {
-    return (squareDist2D(x, y, pos_x, pos_y) <= dimensions[0]*dimensions[0]);
+__device__ bool is_in_sphere(float x, float y, float pos_x, float pos_y, float pos_z, float dimensions) {
+    return (squareDist2D(x, y, pos_x, pos_y) <= dimensions*dimensions);
 }
 
 __device__ int is_in_object(float x, float y, unsigned char id
@@ -491,7 +493,7 @@ __device__ int is_in_object(float x, float y, unsigned char id
     if (id == CUBE) {
         return is_in_cube(x, y, pos_x, pos_y, pos_z, rot_x, rot_y, rot_z, dimensions);
     } else if (id == SPHERE) {
-        side = is_in_sphere(x, y, pos_x, pos_y, pos_z, dimensions);
+        side = is_in_sphere(x, y, pos_x, pos_y, pos_z, dimensions[0]);
         if (side == true) return 0;
         else return -1;
     } else {
@@ -504,22 +506,12 @@ __device__ int is_in_object(float x, float y, unsigned char id
 //------------------------------------------------------------------------------------------//
 __device__ colors get_colors(int id, int side, gpu_object_pointers& gpu_obj_pointers) {
     colors col;
-    col.red = 0;
-    col.green = 0;
-    col.blue = 0;
-    if (id == -1) return col;
-    else {
-        if (gpu_obj_pointers.is_single_color[id] == true) {
-            col.red = gpu_obj_pointers.red[id*MAX_FACES_OBJECT];
-            col.green = gpu_obj_pointers.green[id*MAX_FACES_OBJECT];
-            col.blue = gpu_obj_pointers.blue[id*MAX_FACES_OBJECT];
-        } else {
-            col.red = gpu_obj_pointers.red[id*MAX_FACES_OBJECT+side];
-            col.green = gpu_obj_pointers.green[id*MAX_FACES_OBJECT+side];
-            col.blue = gpu_obj_pointers.blue[id*MAX_FACES_OBJECT+side];
-        }
-        return col;
-    }
+    int single = (gpu_obj_pointers.is_single_color[id] == false) ? side: 0;
+    unsigned char is_valid = (id != -1) ? 1: 0;
+    col.red = is_valid * gpu_obj_pointers.red[id*MAX_FACES_OBJECT+single];
+    col.green = is_valid * gpu_obj_pointers.green[id*MAX_FACES_OBJECT+single];
+    col.blue = is_valid * gpu_obj_pointers.blue[id*MAX_FACES_OBJECT+single];
+    return col;
 }
 
 //------------------------------------------------------------------------------------------//
@@ -534,6 +526,7 @@ __global__ void update_identifiers(gpu_object_pointers gpu_obj_pointers, id_arra
     identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = -1;
     for(int i=0; i<NB_OBJECT; i++) {
         float dim[MAX_DIMENSIONS_OBJECTS];
+        #pragma unroll
         for (int j=0; j<MAX_DIMENSIONS_OBJECTS; j++) {
             dim[j] = gpu_obj_pointers.dimension[i*MAX_DIMENSIONS_OBJECTS+j];
         }
@@ -563,9 +556,7 @@ __global__ void update_image(id_array identifier_array, gpu_object_pointers gpu_
     image.green[height*IMAGE_RESOLUTION_WIDTH + width] = col.green;
     image.blue[height*IMAGE_RESOLUTION_WIDTH + width] = col.blue;
     image.alpha[height*IMAGE_RESOLUTION_WIDTH + width] = 0;
-
 }
-
 
 //------------------------------------------------------------------------------------------//
 // GPU Functions (Debug)
@@ -607,7 +598,7 @@ void draw_image(object_to_gpu& tab_pos, image_array& image
     // Assigns colors to each pixel, simply based on which object is visible (no light computations)
     update_image<<<numBlocks, threadsPerBlock>>>(identifier_array, gpu_obj_pointers, gpu_image);
 
-    // Copy data from video memory
+    // Copy data from video memory (TODO: Needs improvement as this is the slowest point of the "compute")
     copy_data_from_video_memory(gpu_image, image);
 }
 
@@ -793,7 +784,7 @@ int main (int argc, char** argv) {
         tab_pos.rot[4].theta_y += 0.1;
         tab_pos.rot[4].theta_z += 0.1;
 
-        usleep(10000);
+        usleep(100000);
     }
     printf("--------------End of Rendering--------------\n");
 
