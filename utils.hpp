@@ -14,8 +14,10 @@
 #define DEBUG_VALUES true
 
 // Images resolution for the GPU to render
-#define IMAGE_RESOLUTION_WIDTH 500
-#define IMAGE_RESOLUTION_HEIGHT 500
+#define IMAGE_RESOLUTION_WIDTH 320
+#define IMAGE_RESOLUTION_WIDTH_FLOAT 320.0
+#define IMAGE_RESOLUTION_HEIGHT 240
+#define IMAGE_RESOLUTION_HEIGHT_FLOAT 240.0
 
 // Image real size in the space
 #define IMAGE_WIDTH 2000.0
@@ -40,8 +42,8 @@
 #define BOX_DEPTH 2000.0
 
 // Pixel sizes
-#define PIXEL_WIDTH_SIZE IMAGE_WIDTH/IMAGE_RESOLUTION_WIDTH
-#define PIXEL_HEIGHT_SIZE IMAGE_HEIGHT/IMAGE_RESOLUTION_HEIGHT
+#define PIXEL_WIDTH_SIZE IMAGE_WIDTH/IMAGE_RESOLUTION_WIDTH_FLOAT
+#define PIXEL_HEIGHT_SIZE IMAGE_HEIGHT/IMAGE_RESOLUTION_HEIGHT_FLOAT
 
 // Maximum simulation time before end of program (ms)
 #define MAX_SIMU_TIME 120.0
@@ -81,8 +83,8 @@ struct colors {
 };
 
 struct id_array {
-    int id;
-    int side;
+    int* id;
+    int* side;
 };
 
 
@@ -108,10 +110,10 @@ struct object {
 
 // Image array outputed by the GPU in order to be visualised
 struct image_array {
-    unsigned char red[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
-    unsigned char green[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
-    unsigned char blue[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
-    unsigned char alpha[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];  //Opacity of the color
+    unsigned char* red;
+    unsigned char* green;
+    unsigned char* blue;
+    unsigned char* alpha;  //Opacity of the color
 };
 
 // Small AI generated function to output an image from the image array (does not currently support alpha values)

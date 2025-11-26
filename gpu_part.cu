@@ -27,6 +27,7 @@ float dist2D(float A_x, float A_y, float B_x, float B_y) {
     float dy = B_y - A_y;
     return sqrt(dx * dx + dy * dy);
 }
+
 float dist3D(position A, position B) {
     float dx = B.x - A.x;
     float dy = B.y - A.y;
@@ -241,24 +242,24 @@ int is_in_object(float x, float y, unsigned char id, position pos, rotation rot,
     }
 }
 
-void update_identifiers(object_to_gpu tab_pos, id_array* identifier_array) {
+void update_identifiers(object_to_gpu& tab_pos, id_array& identifier_array) {
     for(int height=0; height<IMAGE_RESOLUTION_HEIGHT; height++) {
         for(int width=0; width<IMAGE_RESOLUTION_WIDTH; width++) {
-            float x = IMAGE_OFFSET_WIDTH + PIXEL_WIDTH_SIZE/2.0 + width * PIXEL_WIDTH_SIZE;
-            float y = IMAGE_OFFSET_HEIGHT + PIXEL_HEIGHT_SIZE/2.0 + height * PIXEL_HEIGHT_SIZE;
-            identifier_array[height*IMAGE_RESOLUTION_HEIGHT + width].id = -1;
-            identifier_array[height*IMAGE_RESOLUTION_HEIGHT + width].side = -1;
+            float x = IMAGE_OFFSET_WIDTH + PIXEL_WIDTH_SIZE/2.0 + ((float) width) * PIXEL_WIDTH_SIZE;
+            float y = IMAGE_OFFSET_HEIGHT + PIXEL_HEIGHT_SIZE/2.0 + ((float) height) * PIXEL_HEIGHT_SIZE;
+            identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = -1;
+            identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = -1;
             for(int i=0; i<NB_OBJECT; i++) {
                 int is_in = is_in_object(x, y, tab_pos.type[i], tab_pos.pos[i], tab_pos.rot[i], tab_pos.dimension[i]);
                 if (is_in != -1) {
-                    if (identifier_array[height*IMAGE_RESOLUTION_HEIGHT + width].id != -1) {
-                        if (tab_pos.pos[i].z < tab_pos.pos[identifier_array[height*IMAGE_RESOLUTION_HEIGHT + width].id].z) {
-                            identifier_array[height*IMAGE_RESOLUTION_HEIGHT + width].id = i;
-                            identifier_array[height*IMAGE_RESOLUTION_HEIGHT + width].side = is_in;
+                    if (identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] != -1) {
+                        if (tab_pos.pos[i].z < tab_pos.pos[identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width]].z) {
+                            identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = i;
+                            identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = is_in;
                         }
                     } else {
-                        identifier_array[height*IMAGE_RESOLUTION_HEIGHT + width].id = i;
-                        identifier_array[height*IMAGE_RESOLUTION_HEIGHT + width].side = is_in;
+                        identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = i;
+                        identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = is_in;
                     }
                 }
             }
@@ -266,7 +267,7 @@ void update_identifiers(object_to_gpu tab_pos, id_array* identifier_array) {
     }
 }
 
-colors get_colors(int id, int side, object_to_gpu tab_pos) {
+colors get_colors(int id, int side, object_to_gpu& tab_pos) {
     colors col;
     col.red = 0;
     col.green = 0;
@@ -286,25 +287,25 @@ colors get_colors(int id, int side, object_to_gpu tab_pos) {
     }
 }
 
-void update_image(id_array* identifier_array, object_to_gpu tab_pos, image_array& image) {
+void update_image(id_array& identifier_array, object_to_gpu& tab_pos, image_array& image) {
     for(int height=0; height<IMAGE_RESOLUTION_HEIGHT; height++) {
         for(int width=0; width<IMAGE_RESOLUTION_WIDTH; width++) {
             colors col;
-            col = get_colors(identifier_array[height*IMAGE_RESOLUTION_HEIGHT + width].id, identifier_array[height*IMAGE_RESOLUTION_HEIGHT + width].side, tab_pos);
-            image.red[height*IMAGE_RESOLUTION_HEIGHT + width] = col.red;
-            image.green[height*IMAGE_RESOLUTION_HEIGHT + width] = col.green;
-            image.blue[height*IMAGE_RESOLUTION_HEIGHT + width] = col.blue;
-            image.alpha[height*IMAGE_RESOLUTION_HEIGHT + width] = 0;
+            col = get_colors(identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width], identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width], tab_pos);
+            image.red[height*IMAGE_RESOLUTION_WIDTH + width] = col.red;
+            image.green[height*IMAGE_RESOLUTION_WIDTH + width] = col.green;
+            image.blue[height*IMAGE_RESOLUTION_WIDTH + width] = col.blue;
+            image.alpha[height*IMAGE_RESOLUTION_WIDTH + width] = 0;
         }
     }
 }
 
-void print_identifier_array(id_array* identifier_array) {
+void print_identifier_array(id_array& identifier_array) {
     for(int height=0; height<IMAGE_RESOLUTION_HEIGHT; height++) {
         printf(" ");
         for(int width=0; width<IMAGE_RESOLUTION_WIDTH; width++) {
-            int carac = identifier_array[height*IMAGE_RESOLUTION_HEIGHT + width].id;
-            int side = identifier_array[height*IMAGE_RESOLUTION_HEIGHT + width].side;
+            int carac = identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width];
+            int side = identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width];
             if (carac == -1 or carac>=10) {
                 printf("%d", carac);
             } else {
@@ -334,9 +335,11 @@ void reinit_terminal() {
 //------------------------------------------------------------------------------------------//
 // Draw image function
 //------------------------------------------------------------------------------------------//
-void draw_image(object_to_gpu tab_pos, image_array& image) {
+void draw_image(object_to_gpu& tab_pos, image_array& image) {
     // Array of 2D Object identifier (0 : index of object, 1 : hit side)
-    id_array identifier_array[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
+    id_array identifier_array;
+    identifier_array.id = new int[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
+    identifier_array.side = new int[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
 
     // Compute which object is visible (and which face can we see) for each pixel
     update_identifiers(tab_pos, identifier_array);
@@ -461,6 +464,10 @@ int main (int argc, char** argv) {
 
     // Test image arrays
     image_array image;
+    image.red = new unsigned char[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
+    image.green = new unsigned char[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
+    image.blue = new unsigned char[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
+    image.alpha = new unsigned char[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
 
     printf("Waiting to start\n");
     sleep(5);
