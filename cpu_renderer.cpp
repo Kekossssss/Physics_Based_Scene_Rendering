@@ -499,7 +499,7 @@ int main (int argc, char** argv) {
         }
 
         // Image output temporary function
-        if (save_as_bmp(image, "test_image.bmp") == false) {
+        if (save_as_bmp(image, "test_image_cpu.bmp") == false) {
             printf("Image saving error, leaving loop\n");
             break;
         }
@@ -523,6 +523,7 @@ int main (int argc, char** argv) {
     // Output performance metrics
     printf("\n--------------Run Parameters Recap---------------\n");
     printf("Image resolution : %d * %d\n", IMAGE_RESOLUTION_WIDTH, IMAGE_RESOLUTION_HEIGHT);
+    printf("Number of pixels to compute : %d\n", RESOLUTION);
     printf("Number of objects in simulation : %d\n", NB_OBJECT);
     printf("Number of rendered frames : %d\n", RENDERED_FRAMES);
     printf("-------------------------------------------------\n");

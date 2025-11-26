@@ -11,13 +11,14 @@
 //------------------------------------------------------------------------------------------//
 // Configurable DEBUG parameters
 #define DEBUG_PERF true
-#define DEBUG_VALUES true
+#define DEBUG_VALUES false
 
 // Images resolution for the GPU to render
 #define IMAGE_RESOLUTION_WIDTH 320
 #define IMAGE_RESOLUTION_WIDTH_FLOAT 320.0
-#define IMAGE_RESOLUTION_HEIGHT 240
-#define IMAGE_RESOLUTION_HEIGHT_FLOAT 240.0
+#define IMAGE_RESOLUTION_HEIGHT 320
+#define IMAGE_RESOLUTION_HEIGHT_FLOAT 320.0
+#define RESOLUTION IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT
 
 // Image real size in the space
 #define IMAGE_WIDTH 2000.0
