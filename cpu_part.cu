@@ -270,7 +270,7 @@ bool checkSphereRigidCollision(const Sphere& s, const RigidBody& b) {
     return s.distance(closest) <= s.getRadius();
 }
 
-
+/*
 //////// example 
 int main() {
     double dt = 0.01;
@@ -303,4 +303,4 @@ int main() {
 
     return 0;
 }
-
+*/

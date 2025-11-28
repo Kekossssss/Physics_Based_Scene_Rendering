@@ -8,6 +8,9 @@ all: $(TARGET)
 $(TARGET): main.cu
 	nvcc $(NVFLAGS) -o main main.cu
 
+main_cpu:  main_cpu.cpp
+	g++ $(GCCFLAGS) utils.cpp cpu_renderer.cpp main_cpu.cpp -o main_cpu 
+
 .PHONY: gpu
 all: gpu_exec
 
