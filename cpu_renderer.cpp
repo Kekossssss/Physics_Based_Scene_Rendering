@@ -315,6 +315,33 @@ void print_identifier_array(id_array& identifier_array) {
     }
 }
 
+void simple_anti_aliasing(image_array image) {
+    for(int height=0; height<IMAGE_RESOLUTION_HEIGHT; height++) {
+        for(int width=0; width<IMAGE_RESOLUTION_WIDTH; width++) {
+            int AA_result_red = 0;
+            int AA_result_green = 0;
+            int AA_result_blue = 0;
+            if ((height > AA_SIMPLE_SURROUNDING_PIXEL-1) and (height < IMAGE_RESOLUTION_HEIGHT-AA_SIMPLE_SURROUNDING_PIXEL)) {
+                if ((width > AA_SIMPLE_SURROUNDING_PIXEL-1) and (width < IMAGE_RESOLUTION_WIDTH-AA_SIMPLE_SURROUNDING_PIXEL)) {
+                    for (int i=-AA_SIMPLE_SURROUNDING_PIXEL; i<=AA_SIMPLE_SURROUNDING_PIXEL; i++) {
+                        for (int j=-AA_SIMPLE_SURROUNDING_PIXEL; j<=AA_SIMPLE_SURROUNDING_PIXEL; j++) {
+                            AA_result_red += image.red[(height+i)*IMAGE_RESOLUTION_WIDTH + (width+j)];
+                            AA_result_green += image.green[(height+i)*IMAGE_RESOLUTION_WIDTH + (width+j)];
+                            AA_result_blue += image.blue[(height+i)*IMAGE_RESOLUTION_WIDTH + (width+j)];
+                        }
+                    }
+                    AA_result_red /= (2*AA_SIMPLE_SURROUNDING_PIXEL+1)*(2*AA_SIMPLE_SURROUNDING_PIXEL+1);
+                    image.red[height*IMAGE_RESOLUTION_WIDTH + width] = AA_result_red;
+                    AA_result_green /= (2*AA_SIMPLE_SURROUNDING_PIXEL+1)*(2*AA_SIMPLE_SURROUNDING_PIXEL+1);
+                    image.green[height*IMAGE_RESOLUTION_WIDTH + width] = AA_result_green;
+                    AA_result_blue /= (2*AA_SIMPLE_SURROUNDING_PIXEL+1)*(2*AA_SIMPLE_SURROUNDING_PIXEL+1);
+                    image.blue[height*IMAGE_RESOLUTION_WIDTH + width] = AA_result_blue;
+                }
+            }
+        }
+    }
+}
+
 void reinit_terminal() {
     // Clear message from BMP image
     printf("\x1b[1F"); // Move to beginning of previous line
@@ -346,6 +373,10 @@ void draw_image(object_to_gpu& tab_pos, image_array& image) {
 
     // Assigns colors to each pixel, simply based on which object is visible (no light computations)
     update_image(identifier_array, tab_pos, image);
+
+    if (AA == "simple") {
+        simple_anti_aliasing(image);
+    }
 }
 
 /*

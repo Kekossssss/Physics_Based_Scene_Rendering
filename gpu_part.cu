@@ -587,6 +587,31 @@ __global__ void update_image(id_array identifier_array, gpu_object_pointers gpu_
     image.alpha[height*IMAGE_RESOLUTION_WIDTH + width] = 0;
 }
 
+__global__ void simple_anti_aliasing(image_array image) {
+    int height = blockIdx.x * blockDim.x + threadIdx.x;
+    int width = blockIdx.y * blockDim.y + threadIdx.y;
+    int AA_result_red = 0;
+    int AA_result_green = 0;
+    int AA_result_blue = 0;
+    if ((height > AA_SIMPLE_SURROUNDING_PIXEL-1) and (height < IMAGE_RESOLUTION_HEIGHT-AA_SIMPLE_SURROUNDING_PIXEL)) {
+        if ((width > AA_SIMPLE_SURROUNDING_PIXEL-1) and (width < IMAGE_RESOLUTION_WIDTH-AA_SIMPLE_SURROUNDING_PIXEL)) {
+            for (int i=-AA_SIMPLE_SURROUNDING_PIXEL; i<=AA_SIMPLE_SURROUNDING_PIXEL; i++) {
+                for (int j=-AA_SIMPLE_SURROUNDING_PIXEL; j<=AA_SIMPLE_SURROUNDING_PIXEL; j++) {
+                    AA_result_red += image.red[(height+i)*IMAGE_RESOLUTION_WIDTH + (width+j)];
+                    AA_result_green += image.green[(height+i)*IMAGE_RESOLUTION_WIDTH + (width+j)];
+                    AA_result_blue += image.blue[(height+i)*IMAGE_RESOLUTION_WIDTH + (width+j)];
+                }
+            }
+            AA_result_red /= (2*AA_SIMPLE_SURROUNDING_PIXEL+1)*(2*AA_SIMPLE_SURROUNDING_PIXEL+1);
+            image.red[height*IMAGE_RESOLUTION_WIDTH + width] = AA_result_red;
+            AA_result_green /= (2*AA_SIMPLE_SURROUNDING_PIXEL+1)*(2*AA_SIMPLE_SURROUNDING_PIXEL+1);
+            image.green[height*IMAGE_RESOLUTION_WIDTH + width] = AA_result_green;
+            AA_result_blue /= (2*AA_SIMPLE_SURROUNDING_PIXEL+1)*(2*AA_SIMPLE_SURROUNDING_PIXEL+1);
+            image.blue[height*IMAGE_RESOLUTION_WIDTH + width] = AA_result_blue;
+        }
+    }
+}
+
 //------------------------------------------------------------------------------------------//
 // GPU Functions (Debug)
 //------------------------------------------------------------------------------------------//
@@ -626,6 +651,11 @@ void draw_image(object_to_gpu& tab_pos, image_array& image
 
     // Assigns colors to each pixel, simply based on which object is visible (no light computations)
     update_image<<<numBlocks, threadsPerBlock>>>(identifier_array, gpu_obj_pointers, gpu_image);
+
+    // AntiAliasing
+    if (AA == "simple") {
+        simple_anti_aliasing<<<numBlocks, threadsPerBlock>>>(gpu_image);
+    }
 
     // Copy data from video memory (TODO: Needs improvement as this is the slowest point of the "compute")
     copy_data_from_video_memory(gpu_image, image);

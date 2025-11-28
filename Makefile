@@ -15,13 +15,13 @@ main_cpu:  main_cpu.cpp
 all: gpu_exec
 
 gpu_exec: gpu_part.cu
-	nvcc $(NVFLAGS) -o gpu_exec gpu_part.cu
+	nvcc $(NVFLAGS) -o gpu_exec gpu_part.cu utils.cpp
 
 .PHONY: cpu
 all: cpu_renderer
 
 cpu_renderer: cpu_renderer.cpp
-	g++ $(GCCFLAGS) -o cpu_renderer cpu_renderer.cpp	
+	g++ $(GCCFLAGS) -o cpu_renderer cpu_renderer.cpp utils.cpp
 
 clean:
 	rm -rf main *.o
