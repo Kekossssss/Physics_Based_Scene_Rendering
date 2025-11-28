@@ -247,20 +247,48 @@ void clean_video_memory(id_array& gpu_id_array, image_array& gpu_image, gpu_obje
 //------------------------------------------------------------------------------------------//
 // CPU Functions (Block/Thread allocation management)
 //------------------------------------------------------------------------------------------//
+__global__ void get_warpSize(int* size) {
+    *size = warpSize;
+}
+
 bool allocate_gpu_thread(dim3& numBlocks, dim3& threadsPerBlock) {
+    // Getting Warp Size
+    int* warp_size_device;
+    int warp_size;
+    if (cudaMalloc(&warp_size_device, sizeof(int))!=cudaSuccess) {
+        printf("Cuda Malloc Failed\n");
+    }
+    get_warpSize<<<1, 1>>>(warp_size_device);
+    if (cudaMemcpy(&warp_size, warp_size_device, sizeof(int), ::cudaMemcpyDeviceToHost)!=cudaSuccess) {
+        printf("Cuda Memcpy failed (to host)\n");
+    }
+    if (cudaFree(warp_size_device)!=cudaSuccess) {
+        printf("Cuda Free Failed\n");
+    }
+    // Compute thread allocation
     if (RESOLUTION <= 1024) {
         numBlocks.x = 1;
         numBlocks.y = 1;
         threadsPerBlock.x = IMAGE_RESOLUTION_HEIGHT;
         threadsPerBlock.y = IMAGE_RESOLUTION_WIDTH;
     } else {
-        if ((IMAGE_RESOLUTION_HEIGHT%32 == 0) and (IMAGE_RESOLUTION_WIDTH%32 == 0)) {
-            numBlocks.x = IMAGE_RESOLUTION_HEIGHT/32;
-            numBlocks.y = IMAGE_RESOLUTION_WIDTH/32;
-            threadsPerBlock.x = 32;
-            threadsPerBlock.y = 32;
+        if ((IMAGE_RESOLUTION_HEIGHT%warp_size == 0) and (IMAGE_RESOLUTION_WIDTH%warp_size == 0) and (warp_size<=32)) {
+            numBlocks.x = IMAGE_RESOLUTION_HEIGHT/warp_size;
+            numBlocks.y = IMAGE_RESOLUTION_WIDTH/warp_size;
+            threadsPerBlock.x = warp_size;
+            threadsPerBlock.y = warp_size;
+        } else if ((IMAGE_RESOLUTION_HEIGHT%(warp_size/2) == 0) and (IMAGE_RESOLUTION_WIDTH%(warp_size/2) == 0) and (warp_size<=64)) {
+            numBlocks.x = IMAGE_RESOLUTION_HEIGHT/(warp_size/2);
+            numBlocks.y = IMAGE_RESOLUTION_WIDTH/(warp_size/2);
+            threadsPerBlock.x = (warp_size/2);
+            threadsPerBlock.y = (warp_size/2);
+        } else if ((IMAGE_RESOLUTION_HEIGHT%(warp_size/4) == 0) and (IMAGE_RESOLUTION_WIDTH%(2*warp_size) == 0) and (warp_size<=64)) {
+            numBlocks.x = IMAGE_RESOLUTION_HEIGHT/(warp_size/4);
+            numBlocks.y = IMAGE_RESOLUTION_WIDTH/(2*warp_size);
+            threadsPerBlock.x = (warp_size/4);
+            threadsPerBlock.y = (2*warp_size);
         } else {
-            printf("Resolutions that are not a multiple of 32 are not supported yet\n");
+            printf("Resolutions that are not a multiple of %d/%d are not supported yet\n", warp_size, 2*warp_size);
             return 1;
         }
     }
@@ -314,14 +342,15 @@ __device__ void rotate3D(position& new_pos, position pos
 }
 
 __device__ bool belongs_2D_4side_convex_polygone(float x, float y, position A0, position A1, position A2, position A3, float D) {
+    bool result = true;
     float det1 = (A1.x - A0.x) * (y - A0.y) - (A1.y - A0.y) * (x - A0.x);
     float det2 = (A2.x - A1.x) * (y - A1.y) - (A2.y - A1.y) * (x - A1.x);
-    if (det1 * det2 <= 0) return false;
+    if (det1 * det2 <= 0) result = false;
     float det3 = (A3.x - A2.x) * (y - A2.y) - (A3.y - A2.y) * (x - A2.x);
-    if (det2 * det3 <= 0) return false;
+    if (det2 * det3 <= 0) result = false;
     float det4 = (A0.x - A3.x) * (y - A3.y) - (A0.y - A3.y) * (x - A3.x);
-    if (det3 * det4 <= 0) return false;
-    else return true;
+    if (det3 * det4 <= 0) result = false;
+    return result;
 }
 
 __device__ bool belongs_2D_4side_convex_polygone_with_sides(float x, float y, position A0, position A1, position A2, position A3, float D) {
