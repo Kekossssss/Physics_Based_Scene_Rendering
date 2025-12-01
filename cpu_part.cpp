@@ -203,6 +203,7 @@ bool checkOBBCollision(const RigidBody& A, const RigidBody& B) {
 
     //Test axes of A
     for(int i=0; i<3; i++){
+        const Point3D& Ai = A.getAxis(i);
         // ra = projection of A half-dimensions on its own axis i
         switch(i) {
             case 0: ra = A.getLength() / 2; break;
@@ -221,6 +222,8 @@ bool checkOBBCollision(const RigidBody& A, const RigidBody& B) {
 
     //Test axes of B
     for(int i=0; i<3; i++){
+        const Point3D& Bi = B.getAxis(i);
+
         ra = A.getLength()/2 * AbsR[0][i] + A.getHeight()/2 * AbsR[1][i] + A.getWidth()/2 * AbsR[2][i];
         
         switch(i) {
@@ -236,6 +239,9 @@ bool checkOBBCollision(const RigidBody& A, const RigidBody& B) {
     //Test cross products of axes (9 tests)
     for(int i=0; i<3; i++){
         for(int j=0; j<3; j++){
+            const Point3D& Ai = A.getAxis(i);
+            const Point3D& Bj = B.getAxis(j);
+
             // ra = projection of A on cross product axis
             switch(i) {
                 case 0: ra = A.getHeight()/2 * AbsR[1][j] + A.getWidth()/2 * AbsR[2][j]; break;
@@ -291,3 +297,22 @@ bool checkSphereRigidCollision(const Sphere& s, const RigidBody& b) {
     return s.distance(closest) <= s.getRadius();
 }
 
+int main() {
+    Sphere s1({0,0,0}, 2, {0,0,0});
+    Sphere s2({1,0,0}, 2, {0,0,0});
+
+    if (checkSphereCollision(s1, s2))
+        cout << "Collision detected!\n";
+    else
+        cout << "No collision.\n";
+
+    Cube c1({0,0,0}, 2, {0,0,0}, {0,0,0}, {0,0,0});
+    Cube c2({3,0,0}, 2, {0,0,0}, {0,0,0}, {0,0,0});
+
+    if (checkOBBCollision(c1, c2))
+        cout << "Cube collision detected!\n";
+    else
+        cout << "No cube collision.\n";
+
+    return 0;
+}
