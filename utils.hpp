@@ -14,7 +14,7 @@
 // GPU Rendering Quality Parameters
 //------------------------------------------------------------------------------------------//
 // Anti-Aliasing parameters : off, simple, ...
-#define AA "simple"
+#define AA "off"
 #define AA_SIMPLE_SURROUNDING_PIXEL 2
 
 //------------------------------------------------------------------------------------------//
@@ -75,6 +75,11 @@
 // Correspondance between ID of objects and their types
 #define CUBE 0
 #define SPHERE 1
+
+// Camera viewing position
+#define CAMERA_X IMAGE_WIDTH/2.0
+#define CAMERA_Y IMAGE_HEIGHT/2.0
+#define CAMERA_Z -BOX_DEPTH*2.0
 
 //------------------------------------------------------------------------------------------//
 // GPU memory pointers structure

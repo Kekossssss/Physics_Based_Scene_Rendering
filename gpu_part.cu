@@ -306,10 +306,10 @@ __device__ float dist2D(float A_x, float A_y, float B_x, float B_y) {
     return sqrt(dx * dx + dy * dy);
 }
 
-__device__ float dist3D(float A_x, float A_y, float A_z, float B_x, float B_y, float B_z) {
-    float dx = B_x - A_x;
-    float dy = B_y - A_y;
-    float dz = B_z - A_z;
+__device__ float dist3D(position A, position B) {
+    float dx = B.x - A.x;
+    float dy = B.y - A.y;
+    float dz = B.z - A.z;
     return sqrt(dx * dx + dy * dy + dz * dz);
 }
 
@@ -317,6 +317,13 @@ __device__ float squareDist2D(float A_x, float A_y, float B_x, float B_y) {
     float dx = B_x - A_x;
     float dy = B_y - A_y;
     return dx * dx + dy * dy;
+}
+
+__device__ float squareDist3D(position A, position B) {
+    float dx = B.x - A.x;
+    float dy = B.y - A.y;
+    float dz = B.z - A.z;
+    return dx * dx + dy * dy + dz * dz;
 }
 
 __device__ void rotate2D_x(float& new_y, float& new_z, float old_y, float old_z, float theta) {
@@ -339,6 +346,36 @@ __device__ void rotate3D(position& new_pos, position pos
     rotate2D_x(new_pos.y, new_pos.z, pos.y, pos.z, theta_x);
     rotate2D_y(new_pos.x, new_pos.z, pos.x, new_pos.z, theta_y);
     rotate2D_z(new_pos.x, new_pos.y, new_pos.x, new_pos.y, theta_z);
+}
+
+__device__ position update_camera_perspective(position old_pos) {
+    position new_pos;
+    float ratio = old_pos.z/(old_pos.z - CAMERA_Z);
+    new_pos.x = (CAMERA_X - old_pos.x)*ratio + old_pos.x;
+    new_pos.y = (CAMERA_Y - old_pos.y)*ratio + old_pos.y;
+    new_pos.z = old_pos.z;
+    return new_pos;
+}
+
+__device__ int sort_dist_list(float* list_dist, int* list_faces, int size) {
+    float temp_f;
+    int temp_c;
+    for (int i=0; i<size-1; i++) {
+        for (int j=i+1; j<size; j++) {
+            if (list_dist[i] > list_dist[j]) {
+                temp_f = list_dist[i];
+                temp_c = list_faces[i];
+                list_dist[i] = list_dist[j];
+                list_faces[i] = list_faces[j];
+                list_dist[j] = temp_f;
+                list_faces[j] = temp_c;
+            }
+        }
+    }
+    for (int i=0; i<size; i++) {
+        if (list_faces[i] != -1) return list_faces[i];
+    }
+    return -1;
 }
 
 __device__ bool belongs_2D_4side_convex_polygone(float x, float y, position A0, position A1, position A2, position A3, float D) {
@@ -466,48 +503,87 @@ __device__ int is_in_cube(float x, float y
     H.y += pos_y;
     H.z += pos_z;
     // Compute belonging in front or back plan
-    float front_z = (A.z + B.z + C.z + D.z)/4.0;
-    float back_z = (E.z + F.z + G.z + H.z)/4.0;
-    if (back_z > front_z) {
-        // Front
-        if (belongs_2D_4side_convex_polygone_with_sides(x, y, A, B, C, D, dimensions[0]) == true) {
-            return 2;
-        }
+    position camera;
+    camera.x = CAMERA_X;
+    camera.y = CAMERA_Y;
+    camera.z = CAMERA_Z;
+    position center_front;
+    center_front.x = (A.x + B.x + C.x + D.x)/4.0;
+    center_front.y = (A.y + B.y + C.y + D.y)/4.0;
+    center_front.z = (A.z + B.z + C.z + D.z)/4.0;
+    position center_back;
+    center_back.x = (E.x + F.x + G.x + H.x)/4.0;
+    center_back.y = (E.y + F.y + G.y + H.y)/4.0;
+    center_back.z = (E.z + F.z + G.z + H.z)/4.0;
+    position center_top;
+    center_top.x = (A.x + B.x + F.x + E.x)/4.0;
+    center_top.y = (A.y + B.y + F.y + E.y)/4.0;
+    center_top.z = (A.z + B.z + F.z + E.z)/4.0;
+    position center_bottom;
+    center_bottom.x = (D.x + C.x + G.x + H.x)/4.0;
+    center_bottom.y = (D.y + C.y + G.y + H.y)/4.0;
+    center_bottom.z = (D.z + C.z + G.z + H.z)/4.0;
+    position center_right;
+    center_right.x = (B.x + F.x + G.x + C.x)/4.0;
+    center_right.y = (B.y + F.y + G.y + C.y)/4.0;
+    center_right.z = (B.z + F.z + G.z + C.z)/4.0;
+    position center_left;
+    center_left.x = (A.x + E.x + H.x + D.x)/4.0;
+    center_left.y = (A.y + E.y + H.y + D.y)/4.0;
+    center_left.z = (A.z + E.z + H.z + D.z)/4.0;
+    float dist_to_cam[6];
+    dist_to_cam[0] = squareDist3D(center_front, camera);
+    dist_to_cam[1] = squareDist3D(center_back, camera);
+    dist_to_cam[2] = squareDist3D(center_top, camera);
+    dist_to_cam[3] = squareDist3D(center_bottom, camera);
+    dist_to_cam[4] = squareDist3D(center_right, camera);
+    dist_to_cam[5] = squareDist3D(center_left, camera);
+    int list_faces[6];
+    A = update_camera_perspective(A);
+    B = update_camera_perspective(B);
+    C = update_camera_perspective(C);
+    D = update_camera_perspective(D);
+    E = update_camera_perspective(E);
+    F = update_camera_perspective(F);
+    G = update_camera_perspective(G);
+    H = update_camera_perspective(H);
+    // Front
+    if (belongs_2D_4side_convex_polygone_with_sides(x, y, A, B, C, D, dimensions[0]) == true) {
+        list_faces[0] = 2;
     } else {
-        // Back
-        if (belongs_2D_4side_convex_polygone_with_sides(x, y, E, F, G, H, dimensions[0]) == true) {
-            return 3;
-        }
+        list_faces[0] = -1;
     }
-    // Compute belonging in top or bottom plan
-    float top_z = (A.z + B.z + F.z + E.z)/4.0;
-    float bottom_z = (D.z + C.z + G.z + H.z)/4.0;
-    if (bottom_z > top_z) {
-        // Top
-        if (belongs_2D_4side_convex_polygone_with_sides(x, y, A, B, F, E, dimensions[0]) == true) {
-            return 0;
-        }
+    // Back
+    if (belongs_2D_4side_convex_polygone_with_sides(x, y, E, F, G, H, dimensions[0]) == true) {
+        list_faces[1] = 3;
     } else {
-        // Bottom
-        if (belongs_2D_4side_convex_polygone_with_sides(x, y, D, C, G, H, dimensions[0]) == true) {
-            return 5;
-        }
+        list_faces[1] = -1;
     }
-    //// Compute belonging in right or left plan
-    float right_z = (B.z + F.z + G.z + C.z)/4.0;
-    float left_z = (A.z + E.z + H.z + D.z)/4.0;
-    if (left_z > right_z) {
-        // Right
-        if (belongs_2D_4side_convex_polygone_with_sides(x, y, B, F, G, C, dimensions[0]) == true) {
-            return 1;
-        }
+    // Top
+    if (belongs_2D_4side_convex_polygone_with_sides(x, y, A, B, F, E, dimensions[0]) == true) {
+        list_faces[2] = 0;
     } else {
-        // Left
-        if (belongs_2D_4side_convex_polygone_with_sides(x, y, A, E, H, D, dimensions[0]) == true) {
-            return 4;
-        }
+        list_faces[2] = -1;
     }
-    return -1;
+    // Bottom
+    if (belongs_2D_4side_convex_polygone_with_sides(x, y, D, C, G, H, dimensions[0]) == true) {
+        list_faces[3] = 5;
+    } else {
+        list_faces[3] = -1;
+    }
+    // Right
+    if (belongs_2D_4side_convex_polygone_with_sides(x, y, B, F, G, C, dimensions[0]) == true) {
+        list_faces[4] = 1;
+    } else {
+        list_faces[4] = -1;
+    }
+    // Left
+    if (belongs_2D_4side_convex_polygone_with_sides(x, y, A, E, H, D, dimensions[0]) == true) {
+        list_faces[5] = 4;
+    } else {
+        list_faces[5] = -1;
+    }
+    return sort_dist_list(dist_to_cam, list_faces, 6);
 }
 
 __device__ bool is_in_sphere(float x, float y, float pos_x, float pos_y, float pos_z, float dimensions) {
