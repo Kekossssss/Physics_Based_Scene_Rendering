@@ -792,12 +792,32 @@ int main (int argc, char** argv) {
     tab_pos.rot[2].theta_x = 0.0;
     tab_pos.rot[2].theta_y = 0.0;
     tab_pos.rot[2].theta_z = 0.0;
-    tab_pos.nb_dim[2] = 1;
     tab_pos.dimension[2][0] = 200.0;
-    tab_pos.is_single_color[2] = true;
-    tab_pos.col[2][0].red = 0;
+    tab_pos.is_single_color[2] = false;
+    //// Top
+    tab_pos.col[2][0].red = 255;
     tab_pos.col[2][0].blue = 255;
-    tab_pos.col[2][0].green = 0;
+    tab_pos.col[2][0].green = 255;
+    //// Right
+    tab_pos.col[2][1].red = 0;
+    tab_pos.col[2][1].blue = 0;
+    tab_pos.col[2][1].green = 255;
+    //// Front
+    tab_pos.col[2][2].red = 255;
+    tab_pos.col[2][2].blue = 0;
+    tab_pos.col[2][2].green = 0;
+    //// Back
+    tab_pos.col[2][3].red = 255;
+    tab_pos.col[2][3].blue = 0;
+    tab_pos.col[2][3].green = 255;
+    //// Left
+    tab_pos.col[2][4].red = 0;
+    tab_pos.col[2][4].blue = 255;
+    tab_pos.col[2][4].green = 0;
+    //// Bottom
+    tab_pos.col[2][5].red = 255;
+    tab_pos.col[2][5].blue = 255;
+    tab_pos.col[2][5].green = 255;
 
     // Fourth object (sphere of side R=150.0)
     tab_pos.type[3] = SPHERE;
