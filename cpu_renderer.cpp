@@ -95,23 +95,23 @@ int sort_dist_list(float* list_dist, int* list_faces, int size) {
     return -1;
 }
 
-bool belongs_2D_4side_convex_polygone(float x, float y, position A0, position A1, position A2, position A3, float D) {
+int belongs_2D_4side_convex_polygone(float x, float y, position A0, position A1, position A2, position A3, float D, int face) {
     float det1 = (A1.x - A0.x) * (y - A0.y) - (A1.y - A0.y) * (x - A0.x);
     float det2 = (A2.x - A1.x) * (y - A1.y) - (A2.y - A1.y) * (x - A1.x);
-    if (det1 * det2 <= 0) return false;
+    if (det1 * det2 <= 0) return -1;
     float det3 = (A3.x - A2.x) * (y - A2.y) - (A3.y - A2.y) * (x - A2.x);
-    if (det2 * det3 <= 0) return false;
+    if (det2 * det3 <= 0) return -1;
     float det4 = (A0.x - A3.x) * (y - A3.y) - (A0.y - A3.y) * (x - A3.x);
-    if (det3 * det4 <= 0) return false;
-    else return true;
+    if (det3 * det4 <= 0) return -1;
+    else return face;
 }
 
-bool belongs_2D_4side_convex_polygone_with_sides(float x, float y, position A0, position A1, position A2, position A3, float D) {
+int belongs_2D_4side_convex_polygone_with_sides(float x, float y, position A0, position A1, position A2, position A3, float D, int face) {
     // Point is equal to one of the points of the polygon
-    if (x == A0.x and y == A0.y) return true;
-    if (x == A1.x and y == A1.y) return true;
-    if (x == A2.x and y == A2.y) return true;
-    if (x == A3.x and y == A3.y) return true;
+    if (x == A0.x and y == A0.y) return face;
+    if (x == A1.x and y == A1.y) return face;
+    if (x == A2.x and y == A2.y) return face;
+    if (x == A3.x and y == A3.y) return face;
     // Check if it is inside/on the sides
     float det1 = (A1.x - A0.x) * (y - A0.y) - (A1.y - A0.y) * (x - A0.x);
     float det2 = (A2.x - A1.x) * (y - A1.y) - (A2.y - A1.y) * (x - A1.x);
@@ -119,24 +119,24 @@ bool belongs_2D_4side_convex_polygone_with_sides(float x, float y, position A0, 
     float det4 = (A0.x - A3.x) * (y - A3.y) - (A0.y - A3.y) * (x - A3.x);
     // Point is on the sides
     if (det1 == 0.0) {
-        if (det2 * det3 <= 0) return false;
-        if (det3 * det4 <= 0) return false;
+        if (det2 * det3 <= 0) return -1;
+        if (det3 * det4 <= 0) return -1;
     } else if (det2 == 0.0) {
-        if (det1 * det3 <= 0) return false;
-        if (det3 * det4 <= 0) return false;
+        if (det1 * det3 <= 0) return -1;
+        if (det3 * det4 <= 0) return -1;
     } else if (det3 == 0.0) {
-        if (det1 * det2 <= 0) return false;
-        if (det2 * det4 <= 0) return false;
+        if (det1 * det2 <= 0) return -1;
+        if (det2 * det4 <= 0) return -1;
     } else if (det4 == 0.0) {
-        if (det1 * det2 <= 0) return false;
-        if (det2 * det3 <= 0) return false;
+        if (det1 * det2 <= 0) return -1;
+        if (det2 * det3 <= 0) return -1;
     // Point is inside
     } else {
-        if (det1 * det2 < 0) return false;
-        if (det2 * det3 < 0) return false;
-        if (det3 * det4 < 0) return false;
+        if (det1 * det2 < 0) return -1;
+        if (det2 * det3 < 0) return -1;
+        if (det3 * det4 < 0) return -1;
     }
-    return true;
+    return face;
 }
 
 
@@ -211,7 +211,7 @@ int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) 
     H.x += pos.x;
     H.y += pos.y;
     H.z += pos.z;
-    // Compute belonging in front or back plan
+    // Compute position of faces centers
     position camera;
     camera.x = CAMERA_X;
     camera.y = CAMERA_Y;
@@ -240,6 +240,7 @@ int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) 
     center_left.x = (A.x + E.x + H.x + D.x)/4.0;
     center_left.y = (A.y + E.y + H.y + D.y)/4.0;
     center_left.z = (A.z + E.z + H.z + D.z)/4.0;
+    // Compute distance to faces
     float dist_to_cam[6];
     dist_to_cam[0] = squareDist3D(center_front, camera);
     dist_to_cam[1] = squareDist3D(center_back, camera);
@@ -247,7 +248,7 @@ int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) 
     dist_to_cam[3] = squareDist3D(center_bottom, camera);
     dist_to_cam[4] = squareDist3D(center_right, camera);
     dist_to_cam[5] = squareDist3D(center_left, camera);
-    int list_faces[6];
+    // Update Points position on screen relative to camera viewpoint
     A = update_camera_perspective(A);
     B = update_camera_perspective(B);
     C = update_camera_perspective(C);
@@ -256,42 +257,21 @@ int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) 
     F = update_camera_perspective(F);
     G = update_camera_perspective(G);
     H = update_camera_perspective(H);
+    // Check hit faces
+    int list_faces[6];
     // Front
-    if (belongs_2D_4side_convex_polygone_with_sides(x, y, A, B, C, D, dimensions[0]) == true) {
-        list_faces[0] = 2;
-    } else {
-        list_faces[0] = -1;
-    }
+    list_faces[0] = belongs_2D_4side_convex_polygone_with_sides(x, y, A, B, C, D, dimensions[0], 2);
     // Back
-    if (belongs_2D_4side_convex_polygone_with_sides(x, y, E, F, G, H, dimensions[0]) == true) {
-        list_faces[1] = 3;
-    } else {
-        list_faces[1] = -1;
-    }
+    list_faces[1] = belongs_2D_4side_convex_polygone_with_sides(x, y, E, F, G, H, dimensions[0], 3);
     // Top
-    if (belongs_2D_4side_convex_polygone_with_sides(x, y, A, B, F, E, dimensions[0]) == true) {
-        list_faces[2] = 0;
-    } else {
-        list_faces[2] = -1;
-    }
+    list_faces[2] = belongs_2D_4side_convex_polygone_with_sides(x, y, A, B, F, E, dimensions[0], 0);
     // Bottom
-    if (belongs_2D_4side_convex_polygone_with_sides(x, y, D, C, G, H, dimensions[0]) == true) {
-        list_faces[3] = 5;
-    } else {
-        list_faces[3] = -1;
-    }
+    list_faces[3] = belongs_2D_4side_convex_polygone_with_sides(x, y, D, C, G, H, dimensions[0], 5);
     // Right
-    if (belongs_2D_4side_convex_polygone_with_sides(x, y, B, F, G, C, dimensions[0]) == true) {
-        list_faces[4] = 1;
-    } else {
-        list_faces[4] = -1;
-    }
+    list_faces[4] = belongs_2D_4side_convex_polygone_with_sides(x, y, B, F, G, C, dimensions[0], 1);
     // Left
-    if (belongs_2D_4side_convex_polygone_with_sides(x, y, A, E, H, D, dimensions[0]) == true) {
-        list_faces[5] = 4;
-    } else {
-        list_faces[5] = -1;
-    }
+    list_faces[5] = belongs_2D_4side_convex_polygone_with_sides(x, y, A, E, H, D, dimensions[0], 4);
+    // Return closest hit face
     return sort_dist_list(dist_to_cam, list_faces, 6);
 }
 
