@@ -57,7 +57,7 @@ void rotate2D_z(float& new_x, float& new_y, float old_x, float old_y, float thet
     new_y = old_x * sin(theta) + old_y * cos(theta);
 }
 
-position rotate3D(position pos, rotation rot, position pos_center) {
+position rotate3D(position pos, rotation rot) {
     position new_pos;
     rotate2D_x(new_pos.y, new_pos.z, pos.y, pos.z, rot.theta_x);
     rotate2D_y(new_pos.x, new_pos.z, pos.x, new_pos.z, rot.theta_y);
@@ -151,7 +151,7 @@ int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) 
     A.x = -dimensions[0]/2.0;
     A.y = -dimensions[0]/2.0;
     A.z = -dimensions[0]/2.0;
-    A = rotate3D(A, rot, pos);
+    A = rotate3D(A, rot);
     A.x += pos.x;
     A.y += pos.y;
     A.z += pos.z;
@@ -159,7 +159,7 @@ int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) 
     B.x = dimensions[0]/2.0;
     B.y = -dimensions[0]/2.0;
     B.z = -dimensions[0]/2.0;
-    B = rotate3D(B, rot, pos);
+    B = rotate3D(B, rot);
     B.x += pos.x;
     B.y += pos.y;
     B.z += pos.z;
@@ -167,7 +167,7 @@ int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) 
     C.x = dimensions[0]/2.0;
     C.y = dimensions[0]/2.0;
     C.z = -dimensions[0]/2.0;
-    C = rotate3D(C, rot, pos);
+    C = rotate3D(C, rot);
     C.x += pos.x;
     C.y += pos.y;
     C.z += pos.z;
@@ -175,7 +175,7 @@ int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) 
     D.x = -dimensions[0]/2.0;
     D.y = +dimensions[0]/2.0;
     D.z = -dimensions[0]/2.0;
-    D = rotate3D(D, rot, pos);
+    D = rotate3D(D, rot);
     D.x += pos.x;
     D.y += pos.y;
     D.z += pos.z;
@@ -183,7 +183,7 @@ int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) 
     E.x = -dimensions[0]/2.0;
     E.y = -dimensions[0]/2.0;
     E.z = dimensions[0]/2.0;
-    E = rotate3D(E, rot, pos);
+    E = rotate3D(E, rot);
     E.x += pos.x;
     E.y += pos.y;
     E.z += pos.z;
@@ -191,7 +191,7 @@ int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) 
     F.x = dimensions[0]/2.0;
     F.y = -dimensions[0]/2.0;
     F.z = dimensions[0]/2.0;
-    F = rotate3D(F, rot, pos);
+    F = rotate3D(F, rot);
     F.x += pos.x;
     F.y += pos.y;
     F.z += pos.z;
@@ -199,7 +199,7 @@ int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) 
     G.x = dimensions[0]/2.0;
     G.y = dimensions[0]/2.0;
     G.z = dimensions[0]/2.0;
-    G = rotate3D(G, rot, pos);
+    G = rotate3D(G, rot);
     G.x += pos.x;
     G.y += pos.y;
     G.z += pos.z;
@@ -207,7 +207,7 @@ int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) 
     H.x = -dimensions[0]/2.0;
     H.y = dimensions[0]/2.0;
     H.z = dimensions[0]/2.0;
-    H = rotate3D(H, rot, pos);
+    H = rotate3D(H, rot);
     H.x += pos.x;
     H.y += pos.y;
     H.z += pos.z;
