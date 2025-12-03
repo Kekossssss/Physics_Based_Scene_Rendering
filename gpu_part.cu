@@ -293,7 +293,7 @@ bool allocate_gpu_thread(dim3& numBlocks, dim3& threadsPerBlock) {
         }
     }
     numBlocks.z = 1;
-    numBlocks.z = 1;
+    threadsPerBlock.z = 1;
     return 0;
 }
 
@@ -350,7 +350,12 @@ __device__ void rotate3D(position& new_pos, position pos
 
 __device__ position update_camera_perspective(position old_pos) {
     position new_pos;
-    float ratio = old_pos.z/(old_pos.z - CAMERA_Z);
+    float ratio;
+    if (old_pos.z <= 0.0) {
+        ratio = old_pos.z/(0.0 - CAMERA_Z);
+    } else {
+        ratio = old_pos.z/(old_pos.z - CAMERA_Z);
+    }
     new_pos.x = (CAMERA_X - old_pos.x)*ratio + old_pos.x;
     new_pos.y = (CAMERA_Y - old_pos.y)*ratio + old_pos.y;
     new_pos.z = old_pos.z;
@@ -461,7 +466,7 @@ __device__ int is_in_cube(float x, float y
     C.z += pos_z;
     position D;
     D.x = -dimensions[0]/2.0;
-    D.y = +dimensions[0]/2.0;
+    D.y = dimensions[0]/2.0;
     D.z = -dimensions[0]/2.0;
     rotate3D(D, D, rot_x, rot_y, rot_z);
     D.x += pos_x;

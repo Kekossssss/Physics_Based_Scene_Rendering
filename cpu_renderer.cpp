@@ -57,17 +57,20 @@ void rotate2D_z(float& new_x, float& new_y, float old_x, float old_y, float thet
     new_y = old_x * sin(theta) + old_y * cos(theta);
 }
 
-position rotate3D(position pos, rotation rot) {
-    position new_pos;
+void rotate3D(position& new_pos, position pos, rotation rot) {
     rotate2D_x(new_pos.y, new_pos.z, pos.y, pos.z, rot.theta_x);
     rotate2D_y(new_pos.x, new_pos.z, pos.x, new_pos.z, rot.theta_y);
     rotate2D_z(new_pos.x, new_pos.y, new_pos.x, new_pos.y, rot.theta_z);
-    return new_pos;
 }
 
 position update_camera_perspective(position old_pos) {
     position new_pos;
-    float ratio = old_pos.z/(old_pos.z - CAMERA_Z);
+    float ratio;
+    if (old_pos.z < 0.0) {
+        ratio = old_pos.z/(-CAMERA_Z);
+    } else {
+        ratio = old_pos.z/(old_pos.z - CAMERA_Z);
+    }
     new_pos.x = (CAMERA_X - old_pos.x)*ratio + old_pos.x;
     new_pos.y = (CAMERA_Y - old_pos.y)*ratio + old_pos.y;
     new_pos.z = old_pos.z;
@@ -151,7 +154,7 @@ int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) 
     A.x = -dimensions[0]/2.0;
     A.y = -dimensions[0]/2.0;
     A.z = -dimensions[0]/2.0;
-    A = rotate3D(A, rot);
+    rotate3D(A, A, rot);
     A.x += pos.x;
     A.y += pos.y;
     A.z += pos.z;
@@ -159,7 +162,7 @@ int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) 
     B.x = dimensions[0]/2.0;
     B.y = -dimensions[0]/2.0;
     B.z = -dimensions[0]/2.0;
-    B = rotate3D(B, rot);
+    rotate3D(B, B, rot);
     B.x += pos.x;
     B.y += pos.y;
     B.z += pos.z;
@@ -167,15 +170,15 @@ int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) 
     C.x = dimensions[0]/2.0;
     C.y = dimensions[0]/2.0;
     C.z = -dimensions[0]/2.0;
-    C = rotate3D(C, rot);
+    rotate3D(C, C, rot);
     C.x += pos.x;
     C.y += pos.y;
     C.z += pos.z;
     position D;
     D.x = -dimensions[0]/2.0;
-    D.y = +dimensions[0]/2.0;
+    D.y = dimensions[0]/2.0;
     D.z = -dimensions[0]/2.0;
-    D = rotate3D(D, rot);
+    rotate3D(D, D, rot);
     D.x += pos.x;
     D.y += pos.y;
     D.z += pos.z;
@@ -183,7 +186,7 @@ int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) 
     E.x = -dimensions[0]/2.0;
     E.y = -dimensions[0]/2.0;
     E.z = dimensions[0]/2.0;
-    E = rotate3D(E, rot);
+    rotate3D(E, E, rot);
     E.x += pos.x;
     E.y += pos.y;
     E.z += pos.z;
@@ -191,7 +194,7 @@ int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) 
     F.x = dimensions[0]/2.0;
     F.y = -dimensions[0]/2.0;
     F.z = dimensions[0]/2.0;
-    F = rotate3D(F, rot);
+    rotate3D(F, F, rot);
     F.x += pos.x;
     F.y += pos.y;
     F.z += pos.z;
@@ -199,7 +202,7 @@ int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) 
     G.x = dimensions[0]/2.0;
     G.y = dimensions[0]/2.0;
     G.z = dimensions[0]/2.0;
-    G = rotate3D(G, rot);
+    rotate3D(G, G, rot);
     G.x += pos.x;
     G.y += pos.y;
     G.z += pos.z;
@@ -207,7 +210,7 @@ int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) 
     H.x = -dimensions[0]/2.0;
     H.y = dimensions[0]/2.0;
     H.z = dimensions[0]/2.0;
-    H = rotate3D(H, rot);
+    rotate3D(H, H, rot);
     H.x += pos.x;
     H.y += pos.y;
     H.z += pos.z;
@@ -347,22 +350,12 @@ void update_identifiers_gold(object_to_gpu& tab_pos, id_array& identifier_array)
 
 colors get_colors(int id, int side, object_to_gpu& tab_pos) {
     colors col;
-    col.red = 0;
-    col.green = 0;
-    col.blue = 0;
-    if (id == -1) return col;
-    else {
-        if (tab_pos.is_single_color[id] == true) {
-            col.red = tab_pos.col[id][0].red;
-            col.green = tab_pos.col[id][0].green;
-            col.blue = tab_pos.col[id][0].blue;
-        } else {
-            col.red = tab_pos.col[id][side].red;
-            col.green = tab_pos.col[id][side].green;
-            col.blue = tab_pos.col[id][side].blue;
-        }
-        return col;
-    }
+    int single = (tab_pos.is_single_color[id] == false) ? side: 0;
+    unsigned char is_valid = (id != -1) ? 1: 0;
+    col.red = is_valid * tab_pos.col[id][single].red;
+    col.green = is_valid * tab_pos.col[id][single].green;
+    col.blue = is_valid * tab_pos.col[id][single].blue;
+    return col;
 }
 
 void update_image(id_array& identifier_array, object_to_gpu& tab_pos, image_array& image) {
