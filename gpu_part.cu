@@ -617,19 +617,21 @@ __global__ void update_identifiers(gpu_object_pointers gpu_obj_pointers, id_arra
         for (int j=0; j<MAX_DIMENSIONS_OBJECTS; j++) {
             dim[j] = gpu_obj_pointers.dimension[i*MAX_DIMENSIONS_OBJECTS+j];
         }
-        int is_in = is_in_object(x, y, gpu_obj_pointers.type[i]
-                               , gpu_obj_pointers.pos_x[i], gpu_obj_pointers.pos_y[i], gpu_obj_pointers.pos_z[i]
-                               , gpu_obj_pointers.rot_x[i], gpu_obj_pointers.rot_y[i], gpu_obj_pointers.rot_z[i]
-                               , dim);
-        if (is_in != -1) {
-            if (identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] != -1) {
-                if (gpu_obj_pointers.pos_z[i] < gpu_obj_pointers.pos_z[identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width]]) {
+        if (abs(x - gpu_obj_pointers.pos_x[i]) <= max(2500.0/(-CAMERA_Z), 1.5) * dim[0] and abs(y - gpu_obj_pointers.pos_y[i]) <= max(2500.0/(-CAMERA_Z), 1.5) * dim[0]) {
+            int is_in = is_in_object(x, y, gpu_obj_pointers.type[i]
+                                , gpu_obj_pointers.pos_x[i], gpu_obj_pointers.pos_y[i], gpu_obj_pointers.pos_z[i]
+                                , gpu_obj_pointers.rot_x[i], gpu_obj_pointers.rot_y[i], gpu_obj_pointers.rot_z[i]
+                                , dim);
+            if (is_in != -1) {
+                if (identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] != -1) {
+                    if (gpu_obj_pointers.pos_z[i] < gpu_obj_pointers.pos_z[identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width]]) {
+                        identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = i;
+                        identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = is_in;
+                    }
+                } else {
                     identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = i;
                     identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = is_in;
                 }
-            } else {
-                identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = i;
-                identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = is_in;
             }
         }
     }

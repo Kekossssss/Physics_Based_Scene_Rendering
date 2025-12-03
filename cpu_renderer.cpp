@@ -301,6 +301,33 @@ void update_identifiers(object_to_gpu& tab_pos, id_array& identifier_array) {
             identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = -1;
             identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = -1;
             for(int i=0; i<NB_OBJECT; i++) {
+                if (abs(x - tab_pos.pos[i].x) <= std::max(2500.0/(-CAMERA_Z), 1.5) * tab_pos.dimension[i][0] and abs(y - tab_pos.pos[i].y) <= std::max(2500.0/(-CAMERA_Z), 1.5) * tab_pos.dimension[i][0]) {
+                    int is_in = is_in_object(x, y, tab_pos.type[i], tab_pos.pos[i], tab_pos.rot[i], tab_pos.dimension[i]);
+                    if (is_in != -1) {
+                        if (identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] != -1) {
+                            if (tab_pos.pos[i].z < tab_pos.pos[identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width]].z) {
+                                identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = i;
+                                identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = is_in;
+                            }
+                        } else {
+                            identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = i;
+                            identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = is_in;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+void update_identifiers_gold(object_to_gpu& tab_pos, id_array& identifier_array) {
+    for(int height=0; height<IMAGE_RESOLUTION_HEIGHT; height++) {
+        for(int width=0; width<IMAGE_RESOLUTION_WIDTH; width++) {
+            float x = IMAGE_OFFSET_WIDTH + PIXEL_WIDTH_SIZE/2.0 + ((float) width) * PIXEL_WIDTH_SIZE;
+            float y = IMAGE_OFFSET_HEIGHT + PIXEL_HEIGHT_SIZE/2.0 + ((float) height) * PIXEL_HEIGHT_SIZE;
+            identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = -1;
+            identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = -1;
+            for(int i=0; i<NB_OBJECT; i++) {
                 int is_in = is_in_object(x, y, tab_pos.type[i], tab_pos.pos[i], tab_pos.rot[i], tab_pos.dimension[i]);
                 if (is_in != -1) {
                     if (identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] != -1) {
@@ -410,6 +437,23 @@ void reinit_terminal() {
     }
 }
 
+bool check_image(image_array& img1, image_array& img2) {
+    for(int height=0; height<IMAGE_RESOLUTION_HEIGHT; height++) {
+        for(int width=0; width<IMAGE_RESOLUTION_WIDTH; width++) {
+            if (img1.red[height*IMAGE_RESOLUTION_WIDTH + width] != img2.red[height*IMAGE_RESOLUTION_WIDTH + width]) {
+                return false;
+            }
+            if (img1.green[height*IMAGE_RESOLUTION_WIDTH + width] != img2.green[height*IMAGE_RESOLUTION_WIDTH + width]) {
+                return false;
+            }
+            if (img1.blue[height*IMAGE_RESOLUTION_WIDTH + width] != img2.blue[height*IMAGE_RESOLUTION_WIDTH + width]) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 //------------------------------------------------------------------------------------------//
 // Draw image function
 //------------------------------------------------------------------------------------------//
@@ -436,7 +480,29 @@ void draw_image(object_to_gpu& tab_pos, image_array& image) {
     }
 }
 
-/*
+void draw_image_gold(object_to_gpu& tab_pos, image_array& image) {
+    // Array of 2D Object identifier (0 : index of object, 1 : hit side)
+    id_array identifier_array;
+    identifier_array.id = new int[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
+    identifier_array.side = new int[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
+
+    // Compute which object is visible (and which face can we see) for each pixel
+    update_identifiers_gold(tab_pos, identifier_array);
+
+    // """Image preview"""
+    if (DEBUG_VALUES and IMAGE_RESOLUTION_HEIGHT<32 and IMAGE_RESOLUTION_WIDTH<32) {
+        print_identifier_array(identifier_array);
+        reinit_terminal();
+    }
+
+    // Assigns colors to each pixel, simply based on which object is visible (no light computations)
+    update_image(identifier_array, tab_pos, image);
+
+    if (AA == "simple") {
+        simple_anti_aliasing(image);
+    }
+}
+
 //------------------------------------------------------------------------------------------//
 // Main
 //------------------------------------------------------------------------------------------//
@@ -573,6 +639,12 @@ int main (int argc, char** argv) {
     image.blue = new unsigned char[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
     image.alpha = new unsigned char[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
 
+    image_array image_gold;
+    image_gold.red = new unsigned char[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
+    image_gold.green = new unsigned char[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
+    image_gold.blue = new unsigned char[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
+    image_gold.alpha = new unsigned char[IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT];
+
     printf("Waiting to start\n");
     sleep(5);
 
@@ -607,7 +679,13 @@ int main (int argc, char** argv) {
                 index_max_time = i;
             }
         }
-
+        
+        draw_image_gold(tab_pos, image_gold);
+        if (check_image(image, image_gold)==false) {
+            printf("Image is not correct\n");
+            break;
+        }
+        
         // Image output temporary function
         if (save_as_bmp(image, "test_image_cpu.bmp") == false) {
             printf("Image saving error, leaving loop\n");
@@ -649,4 +727,4 @@ int main (int argc, char** argv) {
         printf("Mean FPS : %f\n", 1000.0 * ((float) RENDERED_FRAMES)/mean_time);
         printf("-------------------------------------------------\n");
     }
-}*/
+}
