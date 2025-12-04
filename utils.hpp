@@ -15,7 +15,23 @@
 //------------------------------------------------------------------------------------------//
 // Anti-Aliasing parameters : off, simple, ...
 #define AA "off"
-#define AA_SIMPLE_SURROUNDING_PIXEL 2
+#define AA_SIMPLE_SURROUNDING_PIXEL 1
+
+
+//------------------------------------------------------------------------------------------//
+// GPU Related parameters
+//------------------------------------------------------------------------------------------//
+#define ENABLE_MULTISTREAM true
+#define ENABLE_LOW_LATENCY_MULTISTREAM true
+#if ENABLE_MULTISTREAM==true
+    #if ENABLE_LOW_LATENCY_MULTISTREAM==true
+        #define NB_STREAM 2
+    #else
+        #define NB_STREAM 3
+    #endif
+#else
+    #define NB_STREAM 1
+#endif
 
 //------------------------------------------------------------------------------------------//
 // Global parameters definition
@@ -79,12 +95,22 @@
 // Camera viewing position
 #define CAMERA_X IMAGE_WIDTH/2.0
 #define CAMERA_Y IMAGE_HEIGHT/2.0
-#define CAMERA_Z -BOX_DEPTH*2.0
+#define CAMERA_Z -BOX_DEPTH/16.0
 
 //------------------------------------------------------------------------------------------//
 // GPU memory pointers structure
 //------------------------------------------------------------------------------------------//
+enum STREAM_STATE {
+    NONE,
+    ALL_ACTIONS,
+    COPY_AND_COMPUTE,
+    COPY_TO_GPU,
+    COMPUTE,
+    COPY_FROM_GPU
+};
+
 struct gpu_object_pointers {
+    STREAM_STATE state;
     unsigned char* type;
     float* pos_x;
     float* pos_y;

@@ -17,68 +17,84 @@
 //------------------------------------------------------------------------------------------//
 // CPU Functions (Video Memory Management)
 //------------------------------------------------------------------------------------------//
-void initiate_video_memory(id_array& gpu_id_array, image_array& gpu_image, gpu_object_pointers& gpu_obj_pointers) {
+bool allocate_gpu_stream(cudaStream_t* gpu_stream) {
+    for (int i=0; i<NB_STREAM; i++) {
+        if (cudaStreamCreate(&gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Stream Initialisation failed (stream %d)\n", i);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void initiate_video_memory(id_array* gpu_id_array, image_array* gpu_image, gpu_object_pointers* gpu_obj_pointers, cudaStream_t* gpu_stream) {
     // Allocate references to variables in GPU memory
-    //// GPU only id_array variable
-    if (cudaMalloc(&gpu_id_array.id, sizeof(int) * RESOLUTION)!=cudaSuccess) {
-        printf("Cuda Malloc Failed\n");
-    }
-    if (cudaMalloc(&gpu_id_array.side, sizeof(int) * RESOLUTION)!=cudaSuccess) {
-        printf("Cuda Malloc Failed\n");
-    }
-    //// GPU Image variable
-    if (cudaMalloc(&gpu_image.red, sizeof(unsigned char) * RESOLUTION)!=cudaSuccess) {
-        printf("Cuda Malloc Failed\n");
-    }
-    if (cudaMalloc(&gpu_image.green, sizeof(unsigned char) * RESOLUTION)!=cudaSuccess) {
-        printf("Cuda Malloc Failed\n");
-    }
-    if (cudaMalloc(&gpu_image.blue, sizeof(unsigned char) * RESOLUTION)!=cudaSuccess) {
-        printf("Cuda Malloc Failed\n");
-    }
-    if (cudaMalloc(&gpu_image.alpha, sizeof(unsigned char) * RESOLUTION)!=cudaSuccess) {
-        printf("Cuda Malloc Failed\n");
-    }
-    //// GPU objects variable allocation
-    if (cudaMalloc(&gpu_obj_pointers.type, sizeof(unsigned char) * NB_OBJECT)!=cudaSuccess) {
-        printf("Cuda Malloc Failed\n");
-    }
-    if (cudaMalloc(&gpu_obj_pointers.pos_x, sizeof(float) * NB_OBJECT)!=cudaSuccess) {
-        printf("Cuda Malloc Failed\n");
-    }
-    if (cudaMalloc(&gpu_obj_pointers.pos_y, sizeof(float) * NB_OBJECT)!=cudaSuccess) {
-        printf("Cuda Malloc Failed\n");
-    }
-    if (cudaMalloc(&gpu_obj_pointers.pos_z, sizeof(float) * NB_OBJECT)!=cudaSuccess) {
-        printf("Cuda Malloc Failed\n");
-    }
-    if (cudaMalloc(&gpu_obj_pointers.rot_x, sizeof(float) * NB_OBJECT)!=cudaSuccess) {
-        printf("Cuda Malloc Failed\n");
-    }
-    if (cudaMalloc(&gpu_obj_pointers.rot_y, sizeof(float) * NB_OBJECT)!=cudaSuccess) {
-        printf("Cuda Malloc Failed\n");
-    }
-    if (cudaMalloc(&gpu_obj_pointers.rot_z, sizeof(float) * NB_OBJECT)!=cudaSuccess) {
-        printf("Cuda Malloc Failed\n");
-    }
-    if (cudaMalloc(&gpu_obj_pointers.dimension, sizeof(float) * NB_OBJECT * MAX_DIMENSIONS_OBJECTS)!=cudaSuccess) {
-        printf("Cuda Malloc Failed\n");
-    }
-    if (cudaMalloc(&gpu_obj_pointers.red, sizeof(unsigned char) * NB_OBJECT * MAX_FACES_OBJECT)!=cudaSuccess) {
-        printf("Cuda Malloc Failed\n");
-    }
-    if (cudaMalloc(&gpu_obj_pointers.green, sizeof(unsigned char) * NB_OBJECT * MAX_FACES_OBJECT)!=cudaSuccess) {
-        printf("Cuda Malloc Failed\n");
-    }
-    if (cudaMalloc(&gpu_obj_pointers.blue, sizeof(unsigned char) * NB_OBJECT * MAX_FACES_OBJECT)!=cudaSuccess) {
-        printf("Cuda Malloc Failed\n");
-    }
-    if (cudaMalloc(&gpu_obj_pointers.is_single_color, sizeof(bool) * NB_OBJECT)!=cudaSuccess) {
-        printf("Cuda Malloc Failed\n");
+    for (int i=0; i<NB_STREAM; i++) {
+        //// Initiate Stream State
+        gpu_obj_pointers[i].state = NONE;
+        //// GPU only id_array variable
+        cudaStreamSynchronize(gpu_stream[i]);
+        if (cudaMallocAsync(&gpu_id_array[i].id, sizeof(int) * RESOLUTION, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Malloc Failed\n");
+        }
+        if (cudaMallocAsync(&gpu_id_array[i].side, sizeof(int) * RESOLUTION, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Malloc Failed\n");
+        }
+        //// GPU Image variable
+        if (cudaMallocAsync(&gpu_image[i].red, sizeof(unsigned char) * RESOLUTION, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Malloc Failed\n");
+        }
+        if (cudaMallocAsync(&gpu_image[i].green, sizeof(unsigned char) * RESOLUTION, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Malloc Failed\n");
+        }
+        if (cudaMallocAsync(&gpu_image[i].blue, sizeof(unsigned char) * RESOLUTION, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Malloc Failed\n");
+        }
+        if (cudaMallocAsync(&gpu_image[i].alpha, sizeof(unsigned char) * RESOLUTION, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Malloc Failed\n");
+        }
+        //// GPU objects variable allocation
+        if (cudaMallocAsync(&gpu_obj_pointers[i].type, sizeof(unsigned char) * NB_OBJECT, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Malloc Failed\n");
+        }
+        if (cudaMallocAsync(&gpu_obj_pointers[i].pos_x, sizeof(float) * NB_OBJECT, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Malloc Failed\n");
+        }
+        if (cudaMallocAsync(&gpu_obj_pointers[i].pos_y, sizeof(float) * NB_OBJECT, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Malloc Failed\n");
+        }
+        if (cudaMallocAsync(&gpu_obj_pointers[i].pos_z, sizeof(float) * NB_OBJECT, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Malloc Failed\n");
+        }
+        if (cudaMallocAsync(&gpu_obj_pointers[i].rot_x, sizeof(float) * NB_OBJECT, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Malloc Failed\n");
+        }
+        if (cudaMallocAsync(&gpu_obj_pointers[i].rot_y, sizeof(float) * NB_OBJECT, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Malloc Failed\n");
+        }
+        if (cudaMallocAsync(&gpu_obj_pointers[i].rot_z, sizeof(float) * NB_OBJECT, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Malloc Failed\n");
+        }
+        if (cudaMallocAsync(&gpu_obj_pointers[i].dimension, sizeof(float) * NB_OBJECT * MAX_DIMENSIONS_OBJECTS, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Malloc Failed\n");
+        }
+        if (cudaMallocAsync(&gpu_obj_pointers[i].red, sizeof(unsigned char) * NB_OBJECT * MAX_FACES_OBJECT, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Malloc Failed\n");
+        }
+        if (cudaMallocAsync(&gpu_obj_pointers[i].green, sizeof(unsigned char) * NB_OBJECT * MAX_FACES_OBJECT, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Malloc Failed\n");
+        }
+        if (cudaMallocAsync(&gpu_obj_pointers[i].blue, sizeof(unsigned char) * NB_OBJECT * MAX_FACES_OBJECT, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Malloc Failed\n");
+        }
+        if (cudaMallocAsync(&gpu_obj_pointers[i].is_single_color, sizeof(bool) * NB_OBJECT, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Malloc Failed\n");
+        }
+        cudaStreamSynchronize(gpu_stream[i]);
     }
 }
 
-void copy_initial_data_to_video_memory(gpu_object_pointers& gpu_obj_pointers, object_to_gpu& obj) {
+void copy_initial_data_to_video_memory(gpu_object_pointers& gpu_obj_pointers, object_to_gpu& obj, cudaStream_t& gpu_stream) {
     // Copy data that doesn't need to be refetch after initialisation
     unsigned char col_r[NB_OBJECT * MAX_FACES_OBJECT];
     unsigned char col_g[NB_OBJECT * MAX_FACES_OBJECT];
@@ -110,27 +126,34 @@ void copy_initial_data_to_video_memory(gpu_object_pointers& gpu_obj_pointers, ob
         }
     }
     // Copy data that doesn't need to be refetch after initialisation
-    if (cudaMemcpy(gpu_obj_pointers.type, obj.type, sizeof(unsigned char) * NB_OBJECT, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+    if (cudaMemcpyAsync(gpu_obj_pointers.type, obj.type, sizeof(unsigned char) * NB_OBJECT, ::cudaMemcpyHostToDevice, gpu_stream)!=cudaSuccess) {
         printf("Cuda Memcpy failed (to device)\n");
     }
-    if (cudaMemcpy(gpu_obj_pointers.dimension, dimension, sizeof(float) * NB_OBJECT * MAX_DIMENSIONS_OBJECTS, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+    if (cudaMemcpyAsync(gpu_obj_pointers.dimension, dimension, sizeof(float) * NB_OBJECT * MAX_DIMENSIONS_OBJECTS, ::cudaMemcpyHostToDevice, gpu_stream)!=cudaSuccess) {
         printf("Cuda Memcpy failed (to device)\n");
     }
-    if (cudaMemcpy(gpu_obj_pointers.red, col_r, sizeof(unsigned char) * NB_OBJECT * MAX_FACES_OBJECT, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+    if (cudaMemcpyAsync(gpu_obj_pointers.red, col_r, sizeof(unsigned char) * NB_OBJECT * MAX_FACES_OBJECT, ::cudaMemcpyHostToDevice, gpu_stream)!=cudaSuccess) {
         printf("Cuda Memcpy failed (to device)\n");
     }
-    if (cudaMemcpy(gpu_obj_pointers.green, col_g, sizeof(unsigned char) * NB_OBJECT * MAX_FACES_OBJECT, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+    if (cudaMemcpyAsync(gpu_obj_pointers.green, col_g, sizeof(unsigned char) * NB_OBJECT * MAX_FACES_OBJECT, ::cudaMemcpyHostToDevice, gpu_stream)!=cudaSuccess) {
         printf("Cuda Memcpy failed (to device)\n");
     }
-    if (cudaMemcpy(gpu_obj_pointers.blue, col_b, sizeof(unsigned char) * NB_OBJECT * MAX_FACES_OBJECT, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+    if (cudaMemcpyAsync(gpu_obj_pointers.blue, col_b, sizeof(unsigned char) * NB_OBJECT * MAX_FACES_OBJECT, ::cudaMemcpyHostToDevice, gpu_stream)!=cudaSuccess) {
         printf("Cuda Memcpy failed (to device)\n");
     }
-    if (cudaMemcpy(gpu_obj_pointers.is_single_color, obj.is_single_color, sizeof(bool) * NB_OBJECT, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+    if (cudaMemcpyAsync(gpu_obj_pointers.is_single_color, obj.is_single_color, sizeof(bool) * NB_OBJECT, ::cudaMemcpyHostToDevice, gpu_stream)!=cudaSuccess) {
         printf("Cuda Memcpy failed (to device)\n");
+    }
+    cudaStreamSynchronize(gpu_stream);
+}
+
+void copy_initial_data_to_video_memory_for_all_streams(gpu_object_pointers* gpu_obj_pointers, object_to_gpu obj, cudaStream_t* gpu_stream) {
+    for (int i=0; i<NB_STREAM; i++) {
+        copy_initial_data_to_video_memory(gpu_obj_pointers[i], obj, gpu_stream[i]);
     }
 }
 
-void copy_data_to_video_memory(gpu_object_pointers& gpu_obj_pointers, object_to_gpu& obj) {
+void copy_data_to_video_memory(gpu_object_pointers& gpu_obj_pointers, object_to_gpu& obj, cudaStream_t gpu_stream) {
     // Puts positional and rotation data in adequate arrays for GPU
     float pos_x[NB_OBJECT];
     float pos_y[NB_OBJECT];
@@ -147,100 +170,105 @@ void copy_data_to_video_memory(gpu_object_pointers& gpu_obj_pointers, object_to_
         rot_z[i] = obj.rot[i].theta_z;
     }
     // Copy positional data which has been computed by the CPU
-    if (cudaMemcpy(gpu_obj_pointers.pos_x, pos_x, sizeof(float) * NB_OBJECT, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+    if (cudaMemcpyAsync(gpu_obj_pointers.pos_x, pos_x, sizeof(float) * NB_OBJECT, ::cudaMemcpyHostToDevice, gpu_stream)!=cudaSuccess) {
         printf("Cuda Memcpy failed (to device)\n");
     }
-    if (cudaMemcpy(gpu_obj_pointers.pos_y, pos_y, sizeof(float) * NB_OBJECT, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+    if (cudaMemcpyAsync(gpu_obj_pointers.pos_y, pos_y, sizeof(float) * NB_OBJECT, ::cudaMemcpyHostToDevice, gpu_stream)!=cudaSuccess) {
         printf("Cuda Memcpy failed (to device)\n");
     }
-    if (cudaMemcpy(gpu_obj_pointers.pos_z, pos_z, sizeof(float) * NB_OBJECT, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+    if (cudaMemcpyAsync(gpu_obj_pointers.pos_z, pos_z, sizeof(float) * NB_OBJECT, ::cudaMemcpyHostToDevice, gpu_stream)!=cudaSuccess) {
         printf("Cuda Memcpy failed (to device)\n");
     }
-    if (cudaMemcpy(gpu_obj_pointers.rot_x, rot_x, sizeof(float) * NB_OBJECT, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+    if (cudaMemcpyAsync(gpu_obj_pointers.rot_x, rot_x, sizeof(float) * NB_OBJECT, ::cudaMemcpyHostToDevice, gpu_stream)!=cudaSuccess) {
         printf("Cuda Memcpy failed (to device)\n");
     }
-    if (cudaMemcpy(gpu_obj_pointers.rot_y, rot_y, sizeof(float) * NB_OBJECT, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+    if (cudaMemcpyAsync(gpu_obj_pointers.rot_y, rot_y, sizeof(float) * NB_OBJECT, ::cudaMemcpyHostToDevice, gpu_stream)!=cudaSuccess) {
         printf("Cuda Memcpy failed (to device)\n");
     }
-    if (cudaMemcpy(gpu_obj_pointers.rot_z, rot_z, sizeof(float) * NB_OBJECT, ::cudaMemcpyHostToDevice)!=cudaSuccess) {
+    if (cudaMemcpyAsync(gpu_obj_pointers.rot_z, rot_z, sizeof(float) * NB_OBJECT, ::cudaMemcpyHostToDevice, gpu_stream)!=cudaSuccess) {
         printf("Cuda Memcpy failed (to device)\n");
     }
 }
 
-void copy_data_from_video_memory(image_array& gpu_image, image_array& img) {
+void copy_data_from_video_memory(image_array& gpu_image, image_array& img, cudaStream_t gpu_stream) {
     // Copy image data from video memory
-    if (cudaMemcpy(img.red, gpu_image.red, sizeof(unsigned char) * RESOLUTION, ::cudaMemcpyDeviceToHost)!=cudaSuccess) {
+    if (cudaMemcpyAsync(img.red, gpu_image.red, sizeof(unsigned char) * RESOLUTION, ::cudaMemcpyDeviceToHost, gpu_stream)!=cudaSuccess) {
         printf("Cuda Memcpy failed (to host)\n");
     }
-    if (cudaMemcpy(img.green, gpu_image.green, sizeof(unsigned char) * RESOLUTION, ::cudaMemcpyDeviceToHost)!=cudaSuccess) {
+    if (cudaMemcpyAsync(img.green, gpu_image.green, sizeof(unsigned char) * RESOLUTION, ::cudaMemcpyDeviceToHost, gpu_stream)!=cudaSuccess) {
         printf("Cuda Memcpy failed (to host)\n");
     }
-    if (cudaMemcpy(img.blue, gpu_image.blue, sizeof(unsigned char) * RESOLUTION, ::cudaMemcpyDeviceToHost)!=cudaSuccess) {
+    if (cudaMemcpyAsync(img.blue, gpu_image.blue, sizeof(unsigned char) * RESOLUTION, ::cudaMemcpyDeviceToHost, gpu_stream)!=cudaSuccess) {
         printf("Cuda Memcpy failed (to host)\n");
     }
-    if (cudaMemcpy(img.alpha, gpu_image.alpha, sizeof(unsigned char) * RESOLUTION, ::cudaMemcpyDeviceToHost)!=cudaSuccess) {
+    if (cudaMemcpyAsync(img.alpha, gpu_image.alpha, sizeof(unsigned char) * RESOLUTION, ::cudaMemcpyDeviceToHost, gpu_stream)!=cudaSuccess) {
         printf("Cuda Memcpy failed (to host)\n");
     }
 }
 
-void clean_video_memory(id_array& gpu_id_array, image_array& gpu_image, gpu_object_pointers& gpu_obj_pointers) {
+void clean_video_memory(id_array* gpu_id_array, image_array* gpu_image, gpu_object_pointers* gpu_obj_pointers, cudaStream_t* gpu_stream) {
     // Allocate references to variables in GPU memory
-    //// GPU only id_array variable
-    if (cudaFree(gpu_id_array.id)!=cudaSuccess) {
-        printf("Cuda Free Failed\n");
-    }
-    if (cudaFree(gpu_id_array.side)!=cudaSuccess) {
-        printf("Cuda Free Failed\n");
-    }
-    //// GPU Image variable
-    if (cudaFree(gpu_image.red)!=cudaSuccess) {
-        printf("Cuda Free Failed\n");
-    }
-    if (cudaFree(gpu_image.green)!=cudaSuccess) {
-        printf("Cuda Free Failed\n");
-    }
-    if (cudaFree(gpu_image.blue)!=cudaSuccess) {
-        printf("Cuda Free Failed\n");
-    }
-    if (cudaFree(gpu_image.alpha)!=cudaSuccess) {
-        printf("Cuda Free Failed\n");
-    }
-    //// GPU objects variable allocation
-    if (cudaFree(gpu_obj_pointers.type)!=cudaSuccess) {
-        printf("Cuda Free Failed\n");
-    }
-    if (cudaFree(gpu_obj_pointers.pos_x)!=cudaSuccess) {
-        printf("Cuda Free Failed\n");
-    }
-    if (cudaFree(gpu_obj_pointers.pos_y)!=cudaSuccess) {
-        printf("Cuda Free Failed\n");
-    }
-    if (cudaFree(gpu_obj_pointers.pos_z)!=cudaSuccess) {
-        printf("Cuda Free Failed\n");
-    }
-    if (cudaFree(gpu_obj_pointers.rot_x)!=cudaSuccess) {
-        printf("Cuda Free Failed\n");
-    }
-    if (cudaFree(gpu_obj_pointers.rot_y)!=cudaSuccess) {
-        printf("Cuda Free Failed\n");
-    }
-    if (cudaFree(gpu_obj_pointers.rot_z)!=cudaSuccess) {
-        printf("Cuda Free Failed\n");
-    }
-    if (cudaFree(gpu_obj_pointers.dimension)!=cudaSuccess) {
-        printf("Cuda Free Failed\n");
-    }
-    if (cudaFree(gpu_obj_pointers.red)!=cudaSuccess) {
-        printf("Cuda Free Failed\n");
-    }
-    if (cudaFree(gpu_obj_pointers.green)!=cudaSuccess) {
-        printf("Cuda Free Failed\n");
-    }
-    if (cudaFree(gpu_obj_pointers.blue)!=cudaSuccess) {
-        printf("Cuda Free Failed\n");
-    }
-    if (cudaFree(gpu_obj_pointers.is_single_color)!=cudaSuccess) {
-        printf("Cuda Free Failed\n");
+    for (int i=0; i<NB_STREAM; i++) {
+        //// GPU only id_array variable
+        cudaStreamSynchronize(gpu_stream[i]);
+        if (cudaFreeAsync(gpu_id_array[i].id, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Free Failed\n");
+        }
+        if (cudaFreeAsync(gpu_id_array[i].side, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Free Failed\n");
+        }
+        //// GPU Image variable
+        if (cudaFreeAsync(gpu_image[i].red, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Free Failed\n");
+        }
+        if (cudaFreeAsync(gpu_image[i].green, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Free Failed\n");
+        }
+        if (cudaFreeAsync(gpu_image[i].blue, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Free Failed\n");
+        }
+        if (cudaFreeAsync(gpu_image[i].alpha, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Free Failed\n");
+        }
+        //// GPU objects variable allocation
+        if (cudaFreeAsync(gpu_obj_pointers[i].type, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Free Failed\n");
+        }
+        if (cudaFreeAsync(gpu_obj_pointers[i].pos_x, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Free Failed\n");
+        }
+        if (cudaFreeAsync(gpu_obj_pointers[i].pos_y, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Free Failed\n");
+        }
+        if (cudaFreeAsync(gpu_obj_pointers[i].pos_z, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Free Failed\n");
+        }
+        if (cudaFreeAsync(gpu_obj_pointers[i].rot_x, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Free Failed\n");
+        }
+        if (cudaFreeAsync(gpu_obj_pointers[i].rot_y, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Free Failed\n");
+        }
+        if (cudaFreeAsync(gpu_obj_pointers[i].rot_z, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Free Failed\n");
+        }
+        if (cudaFreeAsync(gpu_obj_pointers[i].dimension, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Free Failed\n");
+        }
+        if (cudaFreeAsync(gpu_obj_pointers[i].red, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Free Failed\n");
+        }
+        if (cudaFreeAsync(gpu_obj_pointers[i].green, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Free Failed\n");
+        }
+        if (cudaFreeAsync(gpu_obj_pointers[i].blue, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Free Failed\n");
+        }
+        if (cudaFreeAsync(gpu_obj_pointers[i].is_single_color, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Free Failed\n");
+        }
+        cudaStreamSynchronize(gpu_stream[i]);
+        cudaStreamDestroy(gpu_stream[i]);
     }
 }
 
@@ -710,26 +738,120 @@ __global__ void print_identifier_array(id_array identifier_array) {
 //------------------------------------------------------------------------------------------//
 // Draw image function
 //------------------------------------------------------------------------------------------//
-void draw_image(object_to_gpu& tab_pos, image_array& image
-              , id_array& identifier_array, image_array& gpu_image, gpu_object_pointers& gpu_obj_pointers
+bool draw_image(object_to_gpu& tab_pos, image_array& image
+              , id_array* identifier_array, image_array* gpu_image, gpu_object_pointers* gpu_obj_pointers
+              , cudaStream_t* gpu_stream
               , dim3 numBlocks, dim3 threadsPerBlock) {
-    // Copy data to video memory
-    copy_data_to_video_memory(gpu_obj_pointers, tab_pos);
+    bool stream_initialisation = false;
+    bool image_is_valid = false;
+    if (ENABLE_MULTISTREAM == false) {
+        // Synchronize with GPU stream to be sure that last operations are finished
+        cudaStreamSynchronize(gpu_stream[0]);
 
-    // Compute which object is visible (and which face can we see) for each pixel
-    update_identifiers<<<numBlocks, threadsPerBlock>>>(gpu_obj_pointers, identifier_array);
-    //print_identifier_array<<<1, 1>>>(identifier_array);
+        // Copy data to video memory
+        copy_data_to_video_memory(gpu_obj_pointers[0], tab_pos, gpu_stream[0]);
 
-    // Assigns colors to each pixel, simply based on which object is visible (no light computations)
-    update_image<<<numBlocks, threadsPerBlock>>>(identifier_array, gpu_obj_pointers, gpu_image);
+        // Compute which object is visible (and which face can we see) for each pixel
+        update_identifiers<<<numBlocks, threadsPerBlock, 0, gpu_stream[0]>>>(gpu_obj_pointers[0], identifier_array[0]);
+        //print_identifier_array<<<1, 1>>>(identifier_array);
 
-    // AntiAliasing
-    if (AA == "simple") {
-        simple_anti_aliasing<<<numBlocks, threadsPerBlock>>>(gpu_image);
+        // Assigns colors to each pixel, simply based on which object is visible (no light computations)
+        update_image<<<numBlocks, threadsPerBlock, 0, gpu_stream[0]>>>(identifier_array[0], gpu_obj_pointers[0], gpu_image[0]);
+
+        // AntiAliasing
+        if (AA == "simple") {
+            simple_anti_aliasing<<<numBlocks, threadsPerBlock, 0, gpu_stream[0]>>>(gpu_image[0]);
+        }
+
+        // Copy data from video memory (TODO: Needs improvement as this is the slowest point of the "compute")
+        copy_data_from_video_memory(gpu_image[0], image, gpu_stream[0]);
+        if (gpu_obj_pointers[0].state == ALL_ACTIONS) {
+            image_is_valid = true;
+        }
+        gpu_obj_pointers[0].state = ALL_ACTIONS;
+    } else if (ENABLE_LOW_LATENCY_MULTISTREAM == true) {
+        for (int i=0; i<2; i++) {
+            // Synchronize with GPU stream to be sure that last operations are finished
+            cudaStreamSynchronize(gpu_stream[i]);
+            if (gpu_obj_pointers[i].state == COPY_AND_COMPUTE) {
+                // Copy data to video memory
+                copy_data_to_video_memory(gpu_obj_pointers[i], tab_pos, gpu_stream[i]);
+
+                // Compute which object is visible (and which face can we see) for each pixel
+                update_identifiers<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(gpu_obj_pointers[i], identifier_array[i]);
+                //print_identifier_array<<<1, 1>>>(identifier_array);
+
+                // Assigns colors to each pixel, simply based on which object is visible (no light computations)
+                update_image<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(identifier_array[i], gpu_obj_pointers[i], gpu_image[i]);
+
+                // AntiAliasing
+                if (AA == "simple") {
+                    simple_anti_aliasing<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(gpu_image[i]);
+                }
+                gpu_obj_pointers[i].state = COPY_FROM_GPU;
+            } else if (gpu_obj_pointers[i].state == NONE and stream_initialisation == false) {
+                // Copy data to video memory
+                copy_data_to_video_memory(gpu_obj_pointers[i], tab_pos, gpu_stream[i]);
+
+                // Compute which object is visible (and which face can we see) for each pixel
+                update_identifiers<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(gpu_obj_pointers[i], identifier_array[i]);
+                //print_identifier_array<<<1, 1>>>(identifier_array);
+
+                // Assigns colors to each pixel, simply based on which object is visible (no light computations)
+                update_image<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(identifier_array[i], gpu_obj_pointers[i], gpu_image[i]);
+
+                // AntiAliasing
+                if (AA == "simple") {
+                    simple_anti_aliasing<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(gpu_image[i]);
+                }
+                gpu_obj_pointers[i].state = COPY_FROM_GPU;
+                stream_initialisation = true;
+            } else if (gpu_obj_pointers[i].state == COPY_FROM_GPU) {
+                // Copy data from video memory (TODO: Needs improvement as this is the slowest point of the "compute")
+                copy_data_from_video_memory(gpu_image[i], image, gpu_stream[i]);
+                if (gpu_obj_pointers[1].state != NONE) {
+                    image_is_valid = true;
+                }
+                gpu_obj_pointers[i].state = COPY_AND_COMPUTE;
+            }
+        }
+    } else {
+        for (int i=0; i<3; i++) {
+            // Synchronize with GPU stream to be sure that last operations are finished
+            cudaStreamSynchronize(gpu_stream[i]);
+            if (gpu_obj_pointers[i].state == COPY_TO_GPU) {
+                // Copy data to video memory
+                copy_data_to_video_memory(gpu_obj_pointers[i], tab_pos, gpu_stream[i]);
+                gpu_obj_pointers[i].state = COMPUTE;
+            } else if (gpu_obj_pointers[i].state == NONE and stream_initialisation == false) {
+                // Copy data to video memory
+                copy_data_to_video_memory(gpu_obj_pointers[i], tab_pos, gpu_stream[i]);
+                gpu_obj_pointers[i].state = COMPUTE;
+                stream_initialisation = true;
+            } else if (gpu_obj_pointers[i].state == COMPUTE) {
+                // Compute which object is visible (and which face can we see) for each pixel
+                update_identifiers<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(gpu_obj_pointers[i], identifier_array[i]);
+                //print_identifier_array<<<1, 1>>>(identifier_array);
+
+                // Assigns colors to each pixel, simply based on which object is visible (no light computations)
+                update_image<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(identifier_array[i], gpu_obj_pointers[i], gpu_image[i]);
+
+                // AntiAliasing
+                if (AA == "simple") {
+                    simple_anti_aliasing<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(gpu_image[i]);
+                }
+                gpu_obj_pointers[i].state = COPY_FROM_GPU;
+            } else if (gpu_obj_pointers[i].state == COPY_FROM_GPU) {
+                // Copy data from video memory (TODO: Needs improvement as this is the slowest point of the "compute")
+                copy_data_from_video_memory(gpu_image[i], image, gpu_stream[i]);
+                if (gpu_obj_pointers[2].state != NONE) {
+                    image_is_valid = true;
+                }
+                gpu_obj_pointers[i].state = COPY_TO_GPU;
+            }
+        }
     }
-
-    // Copy data from video memory (TODO: Needs improvement as this is the slowest point of the "compute")
-    copy_data_from_video_memory(gpu_image, image);
+    return image_is_valid;
 }
 
 //------------------------------------------------------------------------------------------//
@@ -874,13 +996,16 @@ int main (int argc, char** argv) {
     image.alpha = new unsigned char[RESOLUTION];
 
     // Video Memory initialisation
+    bool image_validity;
+    cudaStream_t gpu_stream[NB_STREAM];
+    if (allocate_gpu_stream(gpu_stream)) return 1;
     dim3 numBlocks, threadsPerBlock;
-    id_array gpu_id_array;
-    image_array gpu_image;
-    gpu_object_pointers gpu_obj_pointers;
+    id_array gpu_id_array[NB_STREAM];
+    image_array gpu_image[NB_STREAM];
+    gpu_object_pointers gpu_obj_pointers[NB_STREAM];
     if (allocate_gpu_thread(numBlocks, threadsPerBlock)) return 1;
-    initiate_video_memory(gpu_id_array, gpu_image, gpu_obj_pointers);
-    copy_initial_data_to_video_memory(gpu_obj_pointers, tab_pos);
+    initiate_video_memory(gpu_id_array, gpu_image, gpu_obj_pointers, gpu_stream);
+    copy_initial_data_to_video_memory_for_all_streams(gpu_obj_pointers, tab_pos, gpu_stream);
 
     printf("Initialisation finished, Waiting to start\n");
     sleep(5);
@@ -896,7 +1021,7 @@ int main (int argc, char** argv) {
         if (DEBUG_PERF) {
             before_image_draw = std::chrono::high_resolution_clock::now();
         }
-        draw_image(tab_pos, image, gpu_id_array, gpu_image, gpu_obj_pointers, numBlocks, threadsPerBlock);
+        image_validity = draw_image(tab_pos, image, gpu_id_array, gpu_image, gpu_obj_pointers, gpu_stream, numBlocks, threadsPerBlock);
         if (DEBUG_PERF) {
             auto after_image_draw = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::milli> temp = after_image_draw - before_image_draw;
@@ -905,7 +1030,11 @@ int main (int argc, char** argv) {
                 printf("\x1b[1F"); // Move to beginning of previous line
                 printf("\x1b[2K"); // Clear entire line
             }
-            printf("Image %d / %d took %f ms to render\n", i+1, RENDERED_FRAMES, time_table[i]);
+            if (image_validity) {
+                printf("Image %d / %d took %f ms to render\n", i+1, RENDERED_FRAMES, time_table[i]);
+            } else {
+                printf("Image %d / %d is not yet valid\n", i+1, RENDERED_FRAMES);
+            }
             mean_time += time_table[i];
             if (min_time > time_table[i]) {
                 min_time = time_table[i];
@@ -918,7 +1047,7 @@ int main (int argc, char** argv) {
         }
 
         // Image output temporary function
-        if (save_as_bmp(image, "test_image_gpu.bmp") == false) {
+        if (image_validity == true and save_as_bmp(image, "test_image_gpu.bmp") == false) {
             printf("Image saving error, leaving loop\n");
             break;
         }
@@ -960,5 +1089,5 @@ int main (int argc, char** argv) {
         printf("Mean FPS : %f\n", 1000.0 * ((float) RENDERED_FRAMES)/mean_time);
         printf("-------------------------------------------------\n");
     }
-    clean_video_memory(gpu_id_array, gpu_image, gpu_obj_pointers);
+    clean_video_memory(gpu_id_array, gpu_image, gpu_obj_pointers, gpu_stream);
 }
