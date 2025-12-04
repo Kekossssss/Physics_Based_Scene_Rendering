@@ -279,8 +279,18 @@ int is_in_cube(float x, float y, position pos, rotation rot, float* dimensions) 
 }
 
 bool is_in_sphere(float x, float y, position pos, float* dimensions) {
-    position new_pos = update_camera_perspective(pos);
-    return (squareDist2D(x, y, new_pos.x, new_pos.y) <= dimensions[0]*dimensions[0]);
+    position new_pos;
+    float ratio;
+    float new_dim;
+    if (pos.z < 0.0) {
+        ratio = pos.z/(-CAMERA_Z);
+    } else {
+        ratio = pos.z/(pos.z - CAMERA_Z);
+    }
+    new_dim = (1.0 - ratio)*dimensions[0];
+    new_pos.x = (CAMERA_X - pos.x)*ratio + pos.x;
+    new_pos.y = (CAMERA_Y - pos.y)*ratio + pos.y;
+    return (squareDist2D(x, y, new_pos.x, new_pos.y) <= new_dim*new_dim);
 }
 
 int is_in_object(float x, float y, unsigned char id, position pos, rotation rot, float* dimensions) {
@@ -304,7 +314,7 @@ void update_identifiers(object_to_gpu& tab_pos, id_array& identifier_array) {
             identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = -1;
             identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = -1;
             for(int i=0; i<NB_OBJECT; i++) {
-                if (abs(x - tab_pos.pos[i].x) <= std::max(2500.0/(-CAMERA_Z), 1.5) * tab_pos.dimension[i][0] and abs(y - tab_pos.pos[i].y) <= std::max(2500.0/(-CAMERA_Z), 1.5) * tab_pos.dimension[i][0]) {
+                if (abs(x - tab_pos.pos[i].x) <= std::max(tab_pos.pos[i].z*400.0/(-CAMERA_Z), 1.5) * tab_pos.dimension[i][0] and abs(y - tab_pos.pos[i].y) <= std::max(tab_pos.pos[i].z*400.0/(-CAMERA_Z), 1.5) * tab_pos.dimension[i][0]) {
                     int is_in = is_in_object(x, y, tab_pos.type[i], tab_pos.pos[i], tab_pos.rot[i], tab_pos.dimension[i]);
                     if (is_in != -1) {
                         if (identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] != -1) {
@@ -676,6 +686,14 @@ int main (int argc, char** argv) {
         draw_image_gold(tab_pos, image_gold);
         if (check_image(image, image_gold)==false) {
             printf("Image is not correct\n");
+            if (save_as_bmp(image, "test_image_cpu_error.bmp") == false) {
+                printf("Image saving error, leaving loop\n");
+                break;
+            }
+            if (save_as_bmp(image_gold, "test_image_cpu_correct.bmp") == false) {
+                printf("Image saving error, leaving loop\n");
+                break;
+            }
             break;
         }
         
@@ -690,7 +708,9 @@ int main (int argc, char** argv) {
         tab_pos.pos[0].y += 40.0;
         tab_pos.pos[1].y += 40.0;
         tab_pos.pos[2].x += 40.0;
+        tab_pos.pos[2].z += 10.0;
         tab_pos.pos[3].x += 10.0;
+        tab_pos.pos[3].z += 10.0;
         tab_pos.pos[4].x += 5.0;
         tab_pos.pos[4].y += 5.0;
         tab_pos.rot[4].theta_x += 0.1;

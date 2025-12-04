@@ -569,12 +569,18 @@ __device__ int is_in_cube(float x, float y
 }
 
 __device__ bool is_in_sphere(float x, float y, float pos_x, float pos_y, float pos_z, float dimensions) {
-    position pos;
-    pos.x = pos_x;
-    pos.y = pos_y;
-    pos.z = pos_z;
-    pos = update_camera_perspective(pos);
-    return (squareDist2D(x, y, pos.x, pos.y) <= dimensions*dimensions);
+    float new_pos_x, new_pos_y;
+    float ratio;
+    float new_dim;
+    if (pos_z < 0.0) {
+        ratio = pos_z/(-CAMERA_Z);
+    } else {
+        ratio = pos_z/(pos_z - CAMERA_Z);
+    }
+    new_dim = (1.0 - ratio)*dimensions;
+    new_pos_x = (CAMERA_X - pos_x)*ratio + pos_x;
+    new_pos_y = (CAMERA_Y - pos_y)*ratio + pos_y;
+    return (squareDist2D(x, y, new_pos_x, new_pos_y) <= new_dim*new_dim);
 }
 
 __device__ int is_in_object(float x, float y, unsigned char id
@@ -622,7 +628,7 @@ __global__ void update_identifiers(gpu_object_pointers gpu_obj_pointers, id_arra
         for (int j=0; j<MAX_DIMENSIONS_OBJECTS; j++) {
             dim[j] = gpu_obj_pointers.dimension[i*MAX_DIMENSIONS_OBJECTS+j];
         }
-        if (abs(x - gpu_obj_pointers.pos_x[i]) <= max(2500.0/(-CAMERA_Z), 1.5) * dim[0] and abs(y - gpu_obj_pointers.pos_y[i]) <= max(2500.0/(-CAMERA_Z), 1.5) * dim[0]) {
+        if (abs(x - gpu_obj_pointers.pos_x[i]) <= max(gpu_obj_pointers.pos_z[i]*400.0/(-CAMERA_Z), 1.5) * dim[0] and abs(y - gpu_obj_pointers.pos_y[i]) <= max(gpu_obj_pointers.pos_z[i]*400.0/(-CAMERA_Z), 1.5) * dim[0]) {
             int is_in = is_in_object(x, y, gpu_obj_pointers.type[i]
                                 , gpu_obj_pointers.pos_x[i], gpu_obj_pointers.pos_y[i], gpu_obj_pointers.pos_z[i]
                                 , gpu_obj_pointers.rot_x[i], gpu_obj_pointers.rot_y[i], gpu_obj_pointers.rot_z[i]
@@ -922,7 +928,9 @@ int main (int argc, char** argv) {
         tab_pos.pos[0].y += 40.0;
         tab_pos.pos[1].y += 40.0;
         tab_pos.pos[2].x += 40.0;
+        tab_pos.pos[2].z += 10.0;
         tab_pos.pos[3].x += 10.0;
+        tab_pos.pos[3].z += 10.0;
         tab_pos.pos[4].x += 5.0;
         tab_pos.pos[4].y += 5.0;
         tab_pos.rot[4].theta_x += 0.1;
