@@ -314,17 +314,30 @@ void update_identifiers(object_to_gpu& tab_pos, id_array& identifier_array) {
             identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = -1;
             identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = -1;
             for(int i=0; i<NB_OBJECT; i++) {
-                if (abs(x - tab_pos.pos[i].x) <= std::max(tab_pos.pos[i].z*400.0/(-CAMERA_Z), 1.5) * tab_pos.dimension[i][0] and abs(y - tab_pos.pos[i].y) <= std::max(tab_pos.pos[i].z*400.0/(-CAMERA_Z), 1.5) * tab_pos.dimension[i][0]) {
-                    int is_in = is_in_object(x, y, tab_pos.type[i], tab_pos.pos[i], tab_pos.rot[i], tab_pos.dimension[i]);
-                    if (is_in != -1) {
-                        if (identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] != -1) {
-                            if (tab_pos.pos[i].z < tab_pos.pos[identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width]].z) {
+                if (identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] == -1) {
+                    if (is_in_sphere(x, y, tab_pos.pos[i], tab_pos.dimension[i])) {
+                        if (tab_pos.type[i] == SPHERE) {
+                            identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = i;
+                            identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = 0;
+                        } else {
+                            int is_in = is_in_object(x, y, tab_pos.type[i], tab_pos.pos[i], tab_pos.rot[i], tab_pos.dimension[i]);
+                            if (is_in != -1) {
                                 identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = i;
                                 identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = is_in;
                             }
-                        } else {
+                        }
+                    }
+                } else if (tab_pos.pos[i].z < tab_pos.pos[identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width]].z) {
+                    if (is_in_sphere(x, y, tab_pos.pos[i], tab_pos.dimension[i])) {
+                        if (tab_pos.type[i] == SPHERE) {
                             identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = i;
-                            identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = is_in;
+                            identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = 0;
+                        } else {
+                            int is_in = is_in_object(x, y, tab_pos.type[i], tab_pos.pos[i], tab_pos.rot[i], tab_pos.dimension[i]);
+                            if (is_in != -1) {
+                                identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = i;
+                                identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = is_in;
+                            }
                         }
                     }
                 }
@@ -341,14 +354,15 @@ void update_identifiers_gold(object_to_gpu& tab_pos, id_array& identifier_array)
             identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = -1;
             identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = -1;
             for(int i=0; i<NB_OBJECT; i++) {
-                int is_in = is_in_object(x, y, tab_pos.type[i], tab_pos.pos[i], tab_pos.rot[i], tab_pos.dimension[i]);
-                if (is_in != -1) {
-                    if (identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] != -1) {
-                        if (tab_pos.pos[i].z < tab_pos.pos[identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width]].z) {
-                            identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = i;
-                            identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = is_in;
-                        }
-                    } else {
+                if (identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] == -1) {
+                    int is_in = is_in_object(x, y, tab_pos.type[i], tab_pos.pos[i], tab_pos.rot[i], tab_pos.dimension[i]);
+                    if (is_in != -1) {
+                        identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = i;
+                        identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = is_in;
+                    }
+                } else if (tab_pos.pos[i].z < tab_pos.pos[identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width]].z) {
+                    int is_in = is_in_object(x, y, tab_pos.type[i], tab_pos.pos[i], tab_pos.rot[i], tab_pos.dimension[i]);
+                    if (is_in != -1) {
                         identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = i;
                         identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = is_in;
                     }
