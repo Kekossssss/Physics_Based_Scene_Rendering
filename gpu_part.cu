@@ -748,7 +748,47 @@ bool draw_image(object_to_gpu& tab_pos, image_array& image
               , cudaStream_t* gpu_stream
               , dim3 numBlocks, dim3 threadsPerBlock) {
     bool image_is_valid = false;
-    if (ENABLE_MULTISTREAM == false) {
+    if (USE_SYNCHRONOUS_GPU == true) {
+        // Synchronize with GPU stream to be sure that last operations are finished
+        if (cudaStreamSynchronize(gpu_stream[0])!=cudaSuccess) {
+            printf("Cuda Synchronization for stream 0 as failed\n");
+        }
+
+        // Copy data to video memory
+        copy_data_to_video_memory(gpu_obj_pointers[0], tab_pos, gpu_stream[0]);
+        if (cudaStreamSynchronize(gpu_stream[0])!=cudaSuccess) {
+            printf("Cuda Synchronization for stream 0 as failed\n");
+        }
+
+        // Compute which object is visible (and which face can we see) for each pixel
+        update_identifiers<<<numBlocks, threadsPerBlock, 0, gpu_stream[0]>>>(gpu_obj_pointers[0], identifier_array[0]);
+        if (cudaStreamSynchronize(gpu_stream[0])!=cudaSuccess) {
+            printf("Cuda Synchronization for stream 0 as failed\n");
+        }
+        //print_identifier_array<<<1, 1>>>(identifier_array);
+
+        // Assigns colors to each pixel, simply based on which object is visible (no light computations)
+        update_image<<<numBlocks, threadsPerBlock, 0, gpu_stream[0]>>>(identifier_array[0], gpu_obj_pointers[0], gpu_image[0]);
+        if (cudaStreamSynchronize(gpu_stream[0])!=cudaSuccess) {
+            printf("Cuda Synchronization for stream 0 as failed\n");
+        }
+
+        // AntiAliasing
+        if (AA == "simple") {
+            simple_anti_aliasing<<<numBlocks, threadsPerBlock, 0, gpu_stream[0]>>>(gpu_image[0]);
+            if (cudaStreamSynchronize(gpu_stream[0])!=cudaSuccess) {
+                printf("Cuda Synchronization for stream 0 as failed\n");
+            }
+        }
+
+        // Copy data from video memory (TODO: Needs improvement as this is the slowest point of the "compute")
+        copy_data_from_video_memory(gpu_image[0], image, gpu_stream[0]);
+        if (cudaStreamSynchronize(gpu_stream[0])!=cudaSuccess) {
+            printf("Cuda Synchronization for stream 0 as failed\n");
+        }
+        image_is_valid = true;
+        gpu_obj_pointers[0].state = ALL_ACTIONS;
+    } else if (ENABLE_MULTISTREAM == false) {
         // Synchronize with GPU stream to be sure that last operations are finished
         if (cudaStreamSynchronize(gpu_stream[0])!=cudaSuccess) {
             printf("Cuda Synchronization for stream 0 as failed\n");

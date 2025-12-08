@@ -14,16 +14,17 @@
 // GPU Rendering Quality Parameters
 //------------------------------------------------------------------------------------------//
 // Anti-Aliasing parameters : off, simple, ...
-#define AA "off"
+#define AA "simple"
 #define AA_SIMPLE_SURROUNDING_PIXEL 1
 
 
 //------------------------------------------------------------------------------------------//
 // GPU Related parameters
 //------------------------------------------------------------------------------------------//
+#define USE_SYNCHRONOUS_GPU false
 #define ENABLE_MULTISTREAM true
 #define ENABLE_LOW_LATENCY_MULTISTREAM false
-#if ENABLE_MULTISTREAM == true
+#if ENABLE_MULTISTREAM == true and USE_SYNCHRONOUS_GPU == false
 #   if ENABLE_LOW_LATENCY_MULTISTREAM == true
 #       define NB_STREAM 2
 #   else
