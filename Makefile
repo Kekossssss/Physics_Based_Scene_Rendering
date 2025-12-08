@@ -1,5 +1,5 @@
 GCCFLAGS := -std=c++17 -O3
-NVFLAGS := -std=c++17 -O3
+NVFLAGS := -std=c++17 -O3 -Xcompiler -fopenmp
 TARGET := main
 
 .PHONY: all

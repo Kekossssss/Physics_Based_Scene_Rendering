@@ -22,15 +22,15 @@
 // GPU Related parameters
 //------------------------------------------------------------------------------------------//
 #define ENABLE_MULTISTREAM true
-#define ENABLE_LOW_LATENCY_MULTISTREAM true
-#if ENABLE_MULTISTREAM==true
-    #if ENABLE_LOW_LATENCY_MULTISTREAM==true
-        #define NB_STREAM 2
-    #else
-        #define NB_STREAM 3
-    #endif
+#define ENABLE_LOW_LATENCY_MULTISTREAM false
+#if ENABLE_MULTISTREAM == true
+#   if ENABLE_LOW_LATENCY_MULTISTREAM == true
+#       define NB_STREAM 2
+#   else
+#       define NB_STREAM 3
+#   endif
 #else
-    #define NB_STREAM 1
+#   define NB_STREAM 1
 #endif
 
 //------------------------------------------------------------------------------------------//
@@ -39,12 +39,16 @@
 // Configurable DEBUG parameters
 #define DEBUG_PERF true
 #define DEBUG_VALUES false
+#if DEBUG_PERF == true
+#   define KEEP_VALUES_HISTORIC false
+#endif
+#define ONLY_FINAL_FRAME true
 
 // Images resolution for the GPU to render
-#define IMAGE_RESOLUTION_WIDTH 640
-#define IMAGE_RESOLUTION_WIDTH_FLOAT 640.0
-#define IMAGE_RESOLUTION_HEIGHT 320
-#define IMAGE_RESOLUTION_HEIGHT_FLOAT 320.0
+#define IMAGE_RESOLUTION_WIDTH 1920
+#define IMAGE_RESOLUTION_WIDTH_FLOAT 1920.0
+#define IMAGE_RESOLUTION_HEIGHT 1080
+#define IMAGE_RESOLUTION_HEIGHT_FLOAT 1080.0
 #define RESOLUTION IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT
 
 // Image real size in the space
@@ -95,7 +99,36 @@
 // Camera viewing position
 #define CAMERA_X IMAGE_WIDTH/2.0
 #define CAMERA_Y IMAGE_HEIGHT/2.0
-#define CAMERA_Z -BOX_DEPTH/16.0
+#define CAMERA_Z -BOX_DEPTH*2.0
+
+//------------------------------------------------------------------------------------------//
+// GPU benchmarking structure
+//------------------------------------------------------------------------------------------//
+struct time_benchmarking {
+    // Enables tracking image output time
+    double time_since_start;
+    // Enables FPS, mean, max and min render time computation
+    double time_since_last_frame;
+    // Enables ananlysis of whole frame rendering time
+    double time_frame_rendering;
+    // Enables analysis of GPU computing times for different parts of the process (only available with 2 or 3 streams)
+    double copy_to_time;
+    double compute_time;
+    double copy_from_time;
+    double copy_to_and_compute_time;
+};
+
+struct values_benchmarking {
+    int index_min_time;
+    double min_time;
+    int index_max_time;
+    double max_time;
+    double mean_time;
+    double mean_time_render;
+    double mean_time_copy_to;
+    double mean_time_compute;
+    double mean_time_copy_from;
+};
 
 //------------------------------------------------------------------------------------------//
 // GPU memory pointers structure

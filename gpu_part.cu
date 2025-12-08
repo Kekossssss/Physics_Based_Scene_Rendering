@@ -4,6 +4,7 @@
 // Librairies
 //------------------------------------------------------------------------------------------//
 #include "cuda.h"
+#include "omp.h"
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -30,8 +31,6 @@ bool allocate_gpu_stream(cudaStream_t* gpu_stream) {
 void initiate_video_memory(id_array* gpu_id_array, image_array* gpu_image, gpu_object_pointers* gpu_obj_pointers, cudaStream_t* gpu_stream) {
     // Allocate references to variables in GPU memory
     for (int i=0; i<NB_STREAM; i++) {
-        //// Initiate Stream State
-        gpu_obj_pointers[i].state = NONE;
         //// GPU only id_array variable
         cudaStreamSynchronize(gpu_stream[i]);
         if (cudaMallocAsync(&gpu_id_array[i].id, sizeof(int) * RESOLUTION, gpu_stream[i])!=cudaSuccess) {
@@ -153,7 +152,7 @@ void copy_initial_data_to_video_memory_for_all_streams(gpu_object_pointers* gpu_
     }
 }
 
-void copy_data_to_video_memory(gpu_object_pointers& gpu_obj_pointers, object_to_gpu& obj, cudaStream_t gpu_stream) {
+void copy_data_to_video_memory(gpu_object_pointers& gpu_obj_pointers, object_to_gpu& obj, cudaStream_t& gpu_stream) {
     // Puts positional and rotation data in adequate arrays for GPU
     float pos_x[NB_OBJECT];
     float pos_y[NB_OBJECT];
@@ -190,7 +189,7 @@ void copy_data_to_video_memory(gpu_object_pointers& gpu_obj_pointers, object_to_
     }
 }
 
-void copy_data_from_video_memory(image_array& gpu_image, image_array& img, cudaStream_t gpu_stream) {
+void copy_data_from_video_memory(image_array& gpu_image, image_array& img, cudaStream_t& gpu_stream) {
     // Copy image data from video memory
     if (cudaMemcpyAsync(img.red, gpu_image.red, sizeof(unsigned char) * RESOLUTION, ::cudaMemcpyDeviceToHost, gpu_stream)!=cudaSuccess) {
         printf("Cuda Memcpy failed (to host)\n");
@@ -748,11 +747,12 @@ bool draw_image(object_to_gpu& tab_pos, image_array& image
               , id_array* identifier_array, image_array* gpu_image, gpu_object_pointers* gpu_obj_pointers
               , cudaStream_t* gpu_stream
               , dim3 numBlocks, dim3 threadsPerBlock) {
-    bool stream_initialisation = false;
     bool image_is_valid = false;
     if (ENABLE_MULTISTREAM == false) {
         // Synchronize with GPU stream to be sure that last operations are finished
-        cudaStreamSynchronize(gpu_stream[0]);
+        if (cudaStreamSynchronize(gpu_stream[0])!=cudaSuccess) {
+            printf("Cuda Synchronization for stream 0 as failed\n");
+        }
 
         // Copy data to video memory
         copy_data_to_video_memory(gpu_obj_pointers[0], tab_pos, gpu_stream[0]);
@@ -776,88 +776,272 @@ bool draw_image(object_to_gpu& tab_pos, image_array& image
         }
         gpu_obj_pointers[0].state = ALL_ACTIONS;
     } else if (ENABLE_LOW_LATENCY_MULTISTREAM == true) {
-        for (int i=0; i<2; i++) {
-            // Synchronize with GPU stream to be sure that last operations are finished
-            cudaStreamSynchronize(gpu_stream[i]);
-            if (gpu_obj_pointers[i].state == COPY_AND_COMPUTE) {
-                // Copy data to video memory
-                copy_data_to_video_memory(gpu_obj_pointers[i], tab_pos, gpu_stream[i]);
+        if (gpu_obj_pointers[0].state == NONE) {
+            gpu_obj_pointers[0].state = COPY_FROM_GPU;
+            gpu_obj_pointers[1].state = COPY_AND_COMPUTE;
+            if (cudaStreamSynchronize(gpu_stream[0])!=cudaSuccess) {
+                printf("Cuda Synchronization for stream %d as failed\n", 0);
+            }
+            // Copy data to video memory
+            copy_data_to_video_memory(gpu_obj_pointers[0], tab_pos, gpu_stream[0]);
 
-                // Compute which object is visible (and which face can we see) for each pixel
-                update_identifiers<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(gpu_obj_pointers[i], identifier_array[i]);
-                //print_identifier_array<<<1, 1>>>(identifier_array);
+            // Compute which object is visible (and which face can we see) for each pixel
+            update_identifiers<<<numBlocks, threadsPerBlock, 0, gpu_stream[0]>>>(gpu_obj_pointers[0], identifier_array[0]);
+            //print_identifier_array<<<1, 1>>>(identifier_array);
 
-                // Assigns colors to each pixel, simply based on which object is visible (no light computations)
-                update_image<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(identifier_array[i], gpu_obj_pointers[i], gpu_image[i]);
+            // Assigns colors to each pixel, simply based on which object is visible (no light computations)
+            update_image<<<numBlocks, threadsPerBlock, 0, gpu_stream[0]>>>(identifier_array[0], gpu_obj_pointers[0], gpu_image[0]);
 
-                // AntiAliasing
-                if (AA == "simple") {
-                    simple_anti_aliasing<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(gpu_image[i]);
+            // AntiAliasing
+            if (AA == "simple") {
+                simple_anti_aliasing<<<numBlocks, threadsPerBlock, 0, gpu_stream[0]>>>(gpu_image[0]);
+            }
+        } else {
+            #pragma omp parallel for num_threads(NB_STREAM) schedule(static)
+            for (int i=0; i<2; i++) {
+                // Synchronize with GPU stream to be sure that last operations are finished
+                if (gpu_obj_pointers[i].state != NONE) {
+                    if (cudaStreamSynchronize(gpu_stream[i])!=cudaSuccess) {
+                        printf("Cuda Synchronization for stream %d as failed\n", i);
+                    }
                 }
-                gpu_obj_pointers[i].state = COPY_FROM_GPU;
-            } else if (gpu_obj_pointers[i].state == NONE and stream_initialisation == false) {
-                // Copy data to video memory
-                copy_data_to_video_memory(gpu_obj_pointers[i], tab_pos, gpu_stream[i]);
+                if (gpu_obj_pointers[i].state == COPY_AND_COMPUTE) {
+                    // Copy data to video memory
+                    copy_data_to_video_memory(gpu_obj_pointers[i], tab_pos, gpu_stream[i]);
 
-                // Compute which object is visible (and which face can we see) for each pixel
-                update_identifiers<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(gpu_obj_pointers[i], identifier_array[i]);
-                //print_identifier_array<<<1, 1>>>(identifier_array);
+                    // Compute which object is visible (and which face can we see) for each pixel
+                    update_identifiers<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(gpu_obj_pointers[i], identifier_array[i]);
+                    //print_identifier_array<<<1, 1>>>(identifier_array);
 
-                // Assigns colors to each pixel, simply based on which object is visible (no light computations)
-                update_image<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(identifier_array[i], gpu_obj_pointers[i], gpu_image[i]);
+                    // Assigns colors to each pixel, simply based on which object is visible (no light computations)
+                    update_image<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(identifier_array[i], gpu_obj_pointers[i], gpu_image[i]);
 
-                // AntiAliasing
-                if (AA == "simple") {
-                    simple_anti_aliasing<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(gpu_image[i]);
-                }
-                gpu_obj_pointers[i].state = COPY_FROM_GPU;
-                stream_initialisation = true;
-            } else if (gpu_obj_pointers[i].state == COPY_FROM_GPU) {
-                // Copy data from video memory (TODO: Needs improvement as this is the slowest point of the "compute")
-                copy_data_from_video_memory(gpu_image[i], image, gpu_stream[i]);
-                if (gpu_obj_pointers[1].state != NONE) {
+                    // AntiAliasing
+                    if (AA == "simple") {
+                        simple_anti_aliasing<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(gpu_image[i]);
+                    }
+                    gpu_obj_pointers[i].state = COPY_FROM_GPU;
+                } else if (gpu_obj_pointers[i].state == COPY_FROM_GPU) {
+                    // Copy data from video memory (TODO: Needs improvement as this is the slowest point of the "compute")
+                    copy_data_from_video_memory(gpu_image[i], image, gpu_stream[i]);
                     image_is_valid = true;
+                    gpu_obj_pointers[i].state = COPY_AND_COMPUTE;
                 }
-                gpu_obj_pointers[i].state = COPY_AND_COMPUTE;
             }
         }
     } else {
-        for (int i=0; i<3; i++) {
-            // Synchronize with GPU stream to be sure that last operations are finished
-            cudaStreamSynchronize(gpu_stream[i]);
-            if (gpu_obj_pointers[i].state == COPY_TO_GPU) {
-                // Copy data to video memory
-                copy_data_to_video_memory(gpu_obj_pointers[i], tab_pos, gpu_stream[i]);
-                gpu_obj_pointers[i].state = COMPUTE;
-            } else if (gpu_obj_pointers[i].state == NONE and stream_initialisation == false) {
-                // Copy data to video memory
-                copy_data_to_video_memory(gpu_obj_pointers[i], tab_pos, gpu_stream[i]);
-                gpu_obj_pointers[i].state = COMPUTE;
-                stream_initialisation = true;
-            } else if (gpu_obj_pointers[i].state == COMPUTE) {
-                // Compute which object is visible (and which face can we see) for each pixel
-                update_identifiers<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(gpu_obj_pointers[i], identifier_array[i]);
-                //print_identifier_array<<<1, 1>>>(identifier_array);
+        if (gpu_obj_pointers[0].state == NONE) {
+            gpu_obj_pointers[0].state = COMPUTE;
+            gpu_obj_pointers[1].state = COPY_TO_GPU;
+            gpu_obj_pointers[2].state = NONE;
+            if (cudaStreamSynchronize(gpu_stream[0])!=cudaSuccess) {
+                printf("Cuda Synchronization for stream %d as failed\n", 0);
+            }
+            // Copy data to video memory
+            copy_data_to_video_memory(gpu_obj_pointers[0], tab_pos, gpu_stream[0]);
+        } else if (gpu_obj_pointers[2].state == NONE) {
+            gpu_obj_pointers[0].state = COPY_FROM_GPU;
+            gpu_obj_pointers[1].state = COMPUTE;
+            gpu_obj_pointers[2].state = COPY_TO_GPU;
+            if (cudaStreamSynchronize(gpu_stream[0])!=cudaSuccess) {
+                printf("Cuda Synchronization for stream %d as failed\n", 0);
+            }
+            // Compute which object is visible (and which face can we see) for each pixel
+            update_identifiers<<<numBlocks, threadsPerBlock, 0, gpu_stream[0]>>>(gpu_obj_pointers[0], identifier_array[0]);
+            //print_identifier_array<<<1, 1>>>(identifier_array);
 
-                // Assigns colors to each pixel, simply based on which object is visible (no light computations)
-                update_image<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(identifier_array[i], gpu_obj_pointers[i], gpu_image[i]);
+            // Assigns colors to each pixel, simply based on which object is visible (no light computations)
+            update_image<<<numBlocks, threadsPerBlock, 0, gpu_stream[0]>>>(identifier_array[0], gpu_obj_pointers[0], gpu_image[0]);
 
-                // AntiAliasing
-                if (AA == "simple") {
-                    simple_anti_aliasing<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(gpu_image[i]);
+            // AntiAliasing
+            if (AA == "simple") {
+                simple_anti_aliasing<<<numBlocks, threadsPerBlock, 0, gpu_stream[0]>>>(gpu_image[0]);
+            }
+            if (cudaStreamSynchronize(gpu_stream[1])!=cudaSuccess) {
+                printf("Cuda Synchronization for stream %d as failed\n", 1);
+            }
+            // Copy data to video memory
+            copy_data_to_video_memory(gpu_obj_pointers[1], tab_pos, gpu_stream[1]);
+        } else {
+            #pragma omp parallel for num_threads(NB_STREAM) schedule(static)
+            for (int i=0; i<3; i++) {
+                // Synchronize with GPU stream to be sure that last operations are finished
+                if (cudaStreamSynchronize(gpu_stream[i])!=cudaSuccess) {
+                    printf("Cuda Synchronization for stream %d as failed\n", i);
                 }
-                gpu_obj_pointers[i].state = COPY_FROM_GPU;
-            } else if (gpu_obj_pointers[i].state == COPY_FROM_GPU) {
-                // Copy data from video memory (TODO: Needs improvement as this is the slowest point of the "compute")
-                copy_data_from_video_memory(gpu_image[i], image, gpu_stream[i]);
-                if (gpu_obj_pointers[2].state != NONE) {
+                if (gpu_obj_pointers[i].state == COPY_TO_GPU) {
+                    // Copy data to video memory
+                    copy_data_to_video_memory(gpu_obj_pointers[i], tab_pos, gpu_stream[i]);
+                    gpu_obj_pointers[i].state = COMPUTE;
+                } else if (gpu_obj_pointers[i].state == COMPUTE) {
+                    // Compute which object is visible (and which face can we see) for each pixel
+                    update_identifiers<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(gpu_obj_pointers[i], identifier_array[i]);
+                    //print_identifier_array<<<1, 1>>>(identifier_array);
+
+                    // Assigns colors to each pixel, simply based on which object is visible (no light computations)
+                    update_image<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(identifier_array[i], gpu_obj_pointers[i], gpu_image[i]);
+
+                    // AntiAliasing
+                    if (AA == "simple") {
+                        simple_anti_aliasing<<<numBlocks, threadsPerBlock, 0, gpu_stream[i]>>>(gpu_image[i]);
+                    }
+                    gpu_obj_pointers[i].state = COPY_FROM_GPU;
+                } else if (gpu_obj_pointers[i].state == COPY_FROM_GPU) {
+                    // Copy data from video memory (TODO: Needs improvement as this is the slowest point of the "compute")
+                    copy_data_from_video_memory(gpu_image[i], image, gpu_stream[i]);
                     image_is_valid = true;
+                    gpu_obj_pointers[i].state = COPY_TO_GPU;
                 }
-                gpu_obj_pointers[i].state = COPY_TO_GPU;
             }
         }
     }
     return image_is_valid;
+}
+
+//------------------------------------------------------------------------------------------//
+// Benchmark debug functions
+//------------------------------------------------------------------------------------------//
+void benchmark_performance(int i, std::chrono::_V2::system_clock::time_point before_image_draw, time_benchmarking* time_table, gpu_object_pointers* gpu_obj_pointers, cudaStream_t* gpu_stream) {
+    #pragma omp parallel for num_threads(NB_STREAM) schedule(static)
+    for (int st=0; st<NB_STREAM; st++) {
+        if (gpu_obj_pointers[st].state != NONE) {
+            if (cudaStreamSynchronize(gpu_stream[st])!=cudaSuccess) {
+                printf("Cuda Synchronization for stream %d as failed (Performance Debug)\n", st);
+            }
+        }
+        auto after_image_draw = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> temp = after_image_draw - before_image_draw;
+        if ((i>=NB_STREAM-1) and gpu_obj_pointers[st].state == COPY_TO_GPU) {
+            int image_id = i-2;
+            if (image_id == 0) {
+                time_table[image_id].copy_from_time = temp.count();
+                time_table[image_id].time_since_start = temp.count() + time_table[image_id].copy_to_time + time_table[image_id].compute_time;
+            } else {
+                time_table[image_id].copy_from_time = temp.count();
+                time_table[image_id].time_since_start = temp.count() + time_table[image_id-1].time_since_start;
+            }
+            time_table[image_id].time_frame_rendering = temp.count() + time_table[image_id].copy_to_time + time_table[image_id].compute_time;
+        } else if (gpu_obj_pointers[st].state == COMPUTE) {
+            time_table[i].copy_to_time = temp.count();
+        } else if (gpu_obj_pointers[st].state == COPY_FROM_GPU) {
+            if (NB_STREAM == 2) {
+                time_table[i].copy_to_and_compute_time = temp.count();
+            } else {
+                time_table[i-1].compute_time = temp.count();
+            }
+        } else if (i<NB_STREAM-1 and gpu_obj_pointers[st].state == COMPUTE) {
+            time_table[i].copy_to_time = temp.count();
+        } else if ((i>=NB_STREAM-1) and gpu_obj_pointers[st].state == COPY_AND_COMPUTE) {
+            int image_id = i-1;
+            if (image_id == 0) {
+                time_table[image_id].copy_from_time = temp.count();
+                time_table[image_id].time_since_start = temp.count() + time_table[image_id].copy_to_and_compute_time;
+            } else {
+                time_table[image_id].copy_from_time = temp.count();
+                time_table[image_id].time_since_start = temp.count() + time_table[image_id-1].time_since_start;
+            }
+            time_table[image_id].time_frame_rendering = temp.count() + time_table[image_id].copy_to_and_compute_time;
+        } else if (gpu_obj_pointers[st].state == ALL_ACTIONS) {
+            if (i>0) {
+                time_table[i].time_since_start = temp.count() + time_table[i-1].time_since_start;
+            } else {
+                time_table[i].time_since_start = temp.count();
+            }
+            time_table[i].time_since_last_frame = temp.count();
+            time_table[i].time_frame_rendering = temp.count();
+        } else {
+        }
+    }
+    if (NB_STREAM == 3) {
+        int image_id = i-2;
+        double time_max = std::max(std::max(time_table[image_id+2].copy_to_time, time_table[image_id+1].compute_time), time_table[image_id].copy_from_time);
+        if (image_id == 0) {
+            time_table[image_id].time_since_last_frame = time_max + time_table[image_id].copy_to_time + time_table[image_id].compute_time;
+        } else {
+            time_table[image_id].time_since_last_frame = time_max;
+        }
+    } else if (NB_STREAM == 2) {
+        int image_id = i-1;
+        double time_max = std::max(time_table[image_id+1].copy_to_and_compute_time, time_table[image_id].copy_from_time);
+        if (image_id == 0) {
+            time_table[image_id].time_since_last_frame = time_max + time_table[image_id].copy_to_and_compute_time;
+        } else {
+            time_table[image_id].time_since_last_frame = time_max;
+        }
+    }
+}
+
+void reinit_terminal(int i) {
+    if (i>0) {
+        printf("\x1b[1F"); // Move to beginning of previous line
+        printf("\x1b[2K"); // Clear entire line
+        if (NB_STREAM == 2) {
+            printf("\x1b[1F"); // Move to beginning of previous line
+            printf("\x1b[2K"); // Clear entire line
+            if (i>=2) {
+                printf("\x1b[1F"); // Move to beginning of previous line
+                printf("\x1b[2K"); // Clear entire line
+            }
+        } else if (NB_STREAM == 3) {
+            printf("\x1b[1F"); // Move to beginning of previous line
+            printf("\x1b[2K"); // Clear entire line
+            if (i>=2) {
+                printf("\x1b[1F"); // Move to beginning of previous line
+                printf("\x1b[2K"); // Clear entire line
+                if (i>=3) {
+                    printf("\x1b[1F"); // Move to beginning of previous line
+                    printf("\x1b[2K"); // Clear entire line
+                }
+            }
+        }
+    }
+}
+
+void print_intermediate_bench_values(int i, time_benchmarking* time_table) {
+    if (i>=(NB_STREAM-1)) {
+        printf("Step: %d | Image %d / %d took %f ms to render\n", i+1, i-(NB_STREAM-1)+1, RENDERED_FRAMES, time_table[i-(NB_STREAM-1)].time_since_last_frame);
+        if (NB_STREAM == 2) {
+            printf("\tCopy and Compute step for image %d took %f ms\n", i-(NB_STREAM-1)+2, time_table[i-(NB_STREAM-1)+1].copy_to_and_compute_time);
+            printf("\tCopy from GPU memory step for image %d took %f ms\n", i-(NB_STREAM-1)+1, time_table[i-(NB_STREAM-1)].copy_from_time);
+        } else if (NB_STREAM == 3) {
+            printf("\tCopy to GPU memory step for image %d took %f ms\n", i-(NB_STREAM-1)+3, time_table[i-(NB_STREAM-1)+2].copy_to_time);
+            printf("\tCompute step for image %d took %f ms\n", i-(NB_STREAM-1)+2, time_table[i-(NB_STREAM-1)+1].compute_time);
+            printf("\tCopy from GPU memory step for image %d took %f ms\n", i-(NB_STREAM-1)+1, time_table[i-(NB_STREAM-1)].copy_from_time);
+        }
+    } else {
+        printf("Step: %d | Image %d / %d is not yet valid\n", i+1, 1, RENDERED_FRAMES);
+        if (NB_STREAM == 2) {
+            printf("\tCopy and Compute step for image %d took %f ms\n", i+1, time_table[i].copy_to_and_compute_time);
+        } else if (NB_STREAM == 3) {
+            printf("\tCopy to GPU memory step for image %d took %f ms\n", i+1, time_table[i].copy_to_time);
+            if (i==1) {
+                printf("\tCompute step for image %d took %f ms\n", i, time_table[i-1].compute_time);
+            }
+        }
+    }
+}
+
+void compute_bench_values(int i, values_benchmarking& bench_values, time_benchmarking* time_table) {
+    if (i>=(NB_STREAM-1)) {
+        bench_values.mean_time += time_table[i-(NB_STREAM-1)].time_since_last_frame;
+        bench_values.mean_time_render += time_table[i-(NB_STREAM-1)].time_frame_rendering;
+        bench_values.mean_time_copy_to += time_table[i-(NB_STREAM-1)].copy_to_time;
+        if (NB_STREAM==2) {
+            bench_values.mean_time_compute += time_table[i-(NB_STREAM-1)].copy_to_and_compute_time;
+            bench_values.mean_time_copy_from += time_table[i-(NB_STREAM-1)].copy_from_time;
+        } else if (NB_STREAM==3) {
+            bench_values.mean_time_compute += time_table[i-(NB_STREAM-1)].compute_time;
+            bench_values.mean_time_copy_from += time_table[i-(NB_STREAM-1)].copy_from_time;
+        }
+        if (bench_values.min_time > time_table[i-(NB_STREAM-1)].time_since_last_frame) {
+            bench_values.min_time = time_table[i-(NB_STREAM-1)].time_since_last_frame;
+            bench_values.index_min_time = i;
+        }
+        if (bench_values.max_time < time_table[i-(NB_STREAM-1)].time_since_last_frame) {
+            bench_values.max_time = time_table[i-(NB_STREAM-1)].time_since_last_frame;
+            bench_values.index_max_time = i;
+        }
+    }
 }
 
 //------------------------------------------------------------------------------------------//
@@ -867,12 +1051,15 @@ int main (int argc, char** argv) {
     // Performance debug values
     auto start = std::chrono::high_resolution_clock::now();
     std::chrono::_V2::system_clock::time_point before_image_draw;
-    double time_table[RENDERED_FRAMES];
-    int index_min_time;
-    double min_time = std::numeric_limits<double>::infinity();
-    int index_max_time;
-    double max_time = 0.0;
-    double mean_time = 0.0;
+    time_benchmarking time_table[RENDERED_FRAMES];
+    values_benchmarking bench_values;
+    bench_values.min_time = std::numeric_limits<double>::infinity();
+    bench_values.max_time = 0.0;
+    bench_values.mean_time = 0.0;
+    bench_values.mean_time_render = 0.0;
+    bench_values.mean_time_copy_to = 0.0;
+    bench_values.mean_time_compute = 0.0;
+    bench_values.mean_time_copy_from = 0.0;
 
     // Test objects positions
     object_to_gpu tab_pos;
@@ -1003,15 +1190,20 @@ int main (int argc, char** argv) {
 
     // Video Memory initialisation
     bool image_validity;
-    cudaStream_t gpu_stream[NB_STREAM];
+    cudaStream_t* gpu_stream;
+    gpu_stream = new cudaStream_t[NB_STREAM];
     if (allocate_gpu_stream(gpu_stream)) return 1;
     dim3 numBlocks, threadsPerBlock;
-    id_array gpu_id_array[NB_STREAM];
-    image_array gpu_image[NB_STREAM];
-    gpu_object_pointers gpu_obj_pointers[NB_STREAM];
+    id_array* gpu_id_array;
+    gpu_id_array = new id_array[NB_STREAM];
+    image_array* gpu_image;
+    gpu_image = new image_array[NB_STREAM];
+    gpu_object_pointers* gpu_obj_pointers;
+    gpu_obj_pointers = new gpu_object_pointers[NB_STREAM];
     if (allocate_gpu_thread(numBlocks, threadsPerBlock)) return 1;
     initiate_video_memory(gpu_id_array, gpu_image, gpu_obj_pointers, gpu_stream);
     copy_initial_data_to_video_memory_for_all_streams(gpu_obj_pointers, tab_pos, gpu_stream);
+    for (int i=0; i<NB_STREAM; i++) gpu_obj_pointers[i].state = NONE;
 
     printf("Initialisation finished, Waiting to start\n");
     sleep(5);
@@ -1029,33 +1221,18 @@ int main (int argc, char** argv) {
         }
         image_validity = draw_image(tab_pos, image, gpu_id_array, gpu_image, gpu_obj_pointers, gpu_stream, numBlocks, threadsPerBlock);
         if (DEBUG_PERF) {
-            auto after_image_draw = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double, std::milli> temp = after_image_draw - before_image_draw;
-            time_table[i] = temp.count();
-            if (i>0) {
-                printf("\x1b[1F"); // Move to beginning of previous line
-                printf("\x1b[2K"); // Clear entire line
-            }
-            if (image_validity) {
-                printf("Image %d / %d took %f ms to render\n", i+1, RENDERED_FRAMES, time_table[i]);
-            } else {
-                printf("Image %d / %d is not yet valid\n", i+1, RENDERED_FRAMES);
-            }
-            mean_time += time_table[i];
-            if (min_time > time_table[i]) {
-                min_time = time_table[i];
-                index_min_time = i;
-            }
-            if (max_time < time_table[i]) {
-                max_time = time_table[i];
-                index_max_time = i;
-            }
+            benchmark_performance(i, before_image_draw, time_table, gpu_obj_pointers, gpu_stream);
+            reinit_terminal(i);
+            print_intermediate_bench_values(i, time_table);
+            compute_bench_values(i, bench_values, time_table);
         }
 
         // Image output temporary function
-        if (image_validity == true and save_as_bmp(image, "test_image_gpu.bmp") == false) {
-            printf("Image saving error, leaving loop\n");
-            break;
+        if (ONLY_FINAL_FRAME == false) {
+            if (image_validity == true and save_as_bmp(image, "test_image_gpu.bmp") == false) {
+                printf("Image saving error, leaving loop\n");
+                break;
+            }
         }
 
         // Temporary positions updates for testing rendering techniques
@@ -1072,9 +1249,16 @@ int main (int argc, char** argv) {
         tab_pos.rot[4].theta_y += 0.1;
         tab_pos.rot[4].theta_z += 0.1;
 
-        usleep(100000);
+        //usleep(3000000);
     }
     printf("--------------End of Rendering--------------\n");
+
+    // Final image output
+    if (ONLY_FINAL_FRAME) {
+        if (image_validity == true and save_as_bmp(image, "test_image_gpu.bmp") == false) {
+            printf("Image saving error, leaving loop\n");
+        }
+    }
 
     // Output performance metrics
     printf("\n--------------Run Parameters Recap---------------\n");
@@ -1089,10 +1273,19 @@ int main (int argc, char** argv) {
         std::chrono::duration<double, std::milli> duration_end = end - start;
         printf("\n--------------Performance Metrics---------------\n");
         printf("Total execution time: %f ms\n", duration_end.count());
-        printf("Mean image drawing time : %f ms\n", mean_time/((float) RENDERED_FRAMES));
-        printf("Maximum image drawing time (%d): %f\n", index_max_time, max_time);
-        printf("Minimum image drawing time (%d): %f\n", index_min_time, min_time);
-        printf("Mean FPS : %f\n", 1000.0 * ((float) RENDERED_FRAMES)/mean_time);
+        printf("Mean time between 2 frames : %f ms\n", bench_values.mean_time/((float) RENDERED_FRAMES-(NB_STREAM-1)));
+        printf("Maximum time between 2 frames (%d -> %d): %f ms\n", bench_values.index_max_time-1, bench_values.index_max_time, bench_values.max_time);
+        printf("Minimum time between 2 frames (%d -> %d): %f ms\n", bench_values.index_min_time-1, bench_values.index_min_time, bench_values.min_time);
+        printf("Mean FPS : %f\n", 1000.0 * ((float) RENDERED_FRAMES-(NB_STREAM-1))/bench_values.mean_time);
+        printf("Mean image rendering time : %f ms\n", bench_values.mean_time_render/((float) RENDERED_FRAMES-(NB_STREAM-1)));
+        if (NB_STREAM==2) {
+            printf("Mean time spent copying/compute on GPU : %f ms\n", bench_values.mean_time_compute/((float) RENDERED_FRAMES-(NB_STREAM-1)));
+            printf("Mean time spent copying from the GPU : %f ms\n", bench_values.mean_time_copy_from/((float) RENDERED_FRAMES-(NB_STREAM-1)));
+        } else if (NB_STREAM==3) {
+            printf("Mean time spent copying to the GPU : %f ms\n", bench_values.mean_time_copy_to/((float) RENDERED_FRAMES-(NB_STREAM-1)));
+            printf("Mean time spent computing on the GPU : %f ms\n", bench_values.mean_time_compute/((float) RENDERED_FRAMES-(NB_STREAM-1)));
+            printf("Mean time spent copying from the GPU : %f ms\n", bench_values.mean_time_copy_from/((float) RENDERED_FRAMES-(NB_STREAM-1)));
+        }
         printf("-------------------------------------------------\n");
     }
     clean_video_memory(gpu_id_array, gpu_image, gpu_obj_pointers, gpu_stream);
