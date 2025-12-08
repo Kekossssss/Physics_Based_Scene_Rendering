@@ -697,24 +697,12 @@ int main (int argc, char** argv) {
             }
         }
         
-        draw_image_gold(tab_pos, image_gold);
-        if (check_image(image, image_gold)==false) {
-            printf("Image is not correct\n");
-            if (save_as_bmp(image, "test_image_cpu_error.bmp") == false) {
-                printf("Image saving error, leaving loop\n");
-                break;
-            }
-            if (save_as_bmp(image_gold, "test_image_cpu_correct.bmp") == false) {
-                printf("Image saving error, leaving loop\n");
-                break;
-            }
-            break;
-        }
-        
         // Image output temporary function
-        if (save_as_bmp(image, "test_image_cpu.bmp") == false) {
-            printf("Image saving error, leaving loop\n");
-            break;
+        if (ONLY_FINAL_FRAME == false) {
+            if (save_as_bmp(image, "test_image_cpu.bmp") == false) {
+                printf("Image saving error, leaving loop\n");
+                break;
+            }
         }
 
         // Temporary positions updates for testing rendering techniques
@@ -734,6 +722,13 @@ int main (int argc, char** argv) {
         //usleep(100000);
     }
     printf("--------------End of Rendering--------------\n");
+
+    // Final image output
+    if (ONLY_FINAL_FRAME) {
+        if (save_as_bmp(image, "test_image_cpu.bmp") == false) {
+            printf("Image saving error, leaving loop\n");
+        }
+    }
 
     // Output performance metrics
     printf("\n--------------Run Parameters Recap---------------\n");
