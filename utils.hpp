@@ -14,7 +14,7 @@
 // GPU Rendering Quality Parameters
 //------------------------------------------------------------------------------------------//
 // Anti-Aliasing parameters : off, simple, ...
-#define AA "simple"
+#define AA "off"
 #define AA_SIMPLE_SURROUNDING_PIXEL 1
 
 
@@ -157,6 +157,10 @@ struct gpu_object_pointers {
     unsigned char* red;
     unsigned char* green;
     unsigned char* blue;
+    int* objects_per_pixel;
+    int* objects_per_line;
+    int* objects_per_block;
+    int* nb_objects_in_block;
 };
 
 //------------------------------------------------------------------------------------------//

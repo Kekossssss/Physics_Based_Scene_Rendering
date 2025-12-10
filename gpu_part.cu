@@ -28,7 +28,7 @@ bool allocate_gpu_stream(cudaStream_t* gpu_stream) {
     return 0;
 }
 
-void initiate_video_memory(id_array* gpu_id_array, image_array* gpu_image, gpu_object_pointers* gpu_obj_pointers, cudaStream_t* gpu_stream) {
+void initiate_video_memory(id_array* gpu_id_array, image_array* gpu_image, gpu_object_pointers* gpu_obj_pointers, cudaStream_t* gpu_stream, dim3 numBlocks) {
     // Allocate references to variables in GPU memory
     for (int i=0; i<NB_STREAM; i++) {
         //// GPU only id_array variable
@@ -87,6 +87,18 @@ void initiate_video_memory(id_array* gpu_id_array, image_array* gpu_image, gpu_o
             printf("Cuda Malloc Failed\n");
         }
         if (cudaMallocAsync(&gpu_obj_pointers[i].is_single_color, sizeof(bool) * NB_OBJECT, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Malloc Failed\n");
+        }
+        if (cudaMallocAsync(&gpu_obj_pointers[i].objects_per_pixel, sizeof(int) * RESOLUTION * NB_OBJECT, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Malloc Failed\n");
+        }
+        if (cudaMallocAsync(&gpu_obj_pointers[i].objects_per_line, sizeof(int) * IMAGE_RESOLUTION_HEIGHT * numBlocks.y * NB_OBJECT, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Malloc Failed\n");
+        }
+        if (cudaMallocAsync(&gpu_obj_pointers[i].objects_per_block, sizeof(int) * numBlocks.x * numBlocks.y * NB_OBJECT, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Malloc Failed\n");
+        }
+        if (cudaMallocAsync(&gpu_obj_pointers[i].nb_objects_in_block, sizeof(int) * numBlocks.x * numBlocks.y, gpu_stream[i])!=cudaSuccess) {
             printf("Cuda Malloc Failed\n");
         }
         cudaStreamSynchronize(gpu_stream[i]);
@@ -264,6 +276,18 @@ void clean_video_memory(id_array* gpu_id_array, image_array* gpu_image, gpu_obje
             printf("Cuda Free Failed\n");
         }
         if (cudaFreeAsync(gpu_obj_pointers[i].is_single_color, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Free Failed\n");
+        }
+        if (cudaFreeAsync(gpu_obj_pointers[i].objects_per_pixel, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Free Failed\n");
+        }
+        if (cudaFreeAsync(gpu_obj_pointers[i].objects_per_line, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Free Failed\n");
+        }
+        if (cudaFreeAsync(gpu_obj_pointers[i].objects_per_block, gpu_stream[i])!=cudaSuccess) {
+            printf("Cuda Free Failed\n");
+        }
+        if (cudaFreeAsync(gpu_obj_pointers[i].nb_objects_in_block, gpu_stream[i])!=cudaSuccess) {
             printf("Cuda Free Failed\n");
         }
         cudaStreamSynchronize(gpu_stream[i]);
@@ -649,31 +673,66 @@ __global__ void update_identifiers(gpu_object_pointers gpu_obj_pointers, id_arra
     float y = IMAGE_OFFSET_HEIGHT + PIXEL_HEIGHT_SIZE/2.0 + ((float) height) * PIXEL_HEIGHT_SIZE;
     identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = -1;
     identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = -1;
-    for(int i=0; i<NB_OBJECT; i++) {
+
+    #pragma unroll
+    for (int i=0; i<NB_OBJECT; i++) {
+        gpu_obj_pointers.objects_per_pixel[height*IMAGE_RESOLUTION_WIDTH*NB_OBJECT + width*NB_OBJECT + i] = is_in_sphere(x, y, gpu_obj_pointers.pos_x[i], gpu_obj_pointers.pos_y[i], gpu_obj_pointers.pos_z[i], gpu_obj_pointers.dimension[i*MAX_DIMENSIONS_OBJECTS]);
+    }
+
+    // Checks the list for summarizing the objects that needs to be computed in the lines of the block
+    __syncthreads();
+    if (width == blockIdx.y * blockDim.y) {
+        for (int i=width; i<(blockIdx.y + 1) * blockDim.y; i++) {
+            #pragma unroll
+            for (int j=0; j<NB_OBJECT; j++) {
+                if (gpu_obj_pointers.objects_per_pixel[height*IMAGE_RESOLUTION_WIDTH*NB_OBJECT + i*NB_OBJECT + j] == 1) {
+                    gpu_obj_pointers.objects_per_line[height*NB_OBJECT*gridDim.y + blockIdx.y + j] = 1;
+                }
+            }
+        }
+    }
+
+    // Checks the list for summarizing the objects that needs to be computed in the block
+    __syncthreads();
+    if (height == blockIdx.x * blockDim.x and width == blockIdx.y * blockDim.y) {
+        gpu_obj_pointers.nb_objects_in_block[blockIdx.x*gridDim.y + blockIdx.y] = 0;
+        for (int i=0; i<NB_OBJECT; i++) {
+            for (int j=height; j<(blockIdx.x + 1) * blockDim.x; j++) {
+                if (gpu_obj_pointers.objects_per_line[j*NB_OBJECT*gridDim.y + blockIdx.y + i] == 1) {
+                    gpu_obj_pointers.objects_per_block[blockIdx.x*gridDim.y*NB_OBJECT + blockIdx.y*NB_OBJECT + gpu_obj_pointers.nb_objects_in_block[blockIdx.x*gridDim.y + blockIdx.y]] = i;
+                    gpu_obj_pointers.nb_objects_in_block[blockIdx.x*gridDim.y + blockIdx.y] += 1;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Run the object loops, only on the objects that are really present in the block
+    __syncthreads();
+    for(int i=0; i<gpu_obj_pointers.nb_objects_in_block[blockIdx.x*gridDim.y + blockIdx.y]; i++) {
+        int obj_id = gpu_obj_pointers.objects_per_block[blockIdx.x*gridDim.y*NB_OBJECT + blockIdx.y*NB_OBJECT + i];
         float dim[MAX_DIMENSIONS_OBJECTS];
         #pragma unroll
         for (int j=0; j<MAX_DIMENSIONS_OBJECTS; j++) {
-            dim[j] = gpu_obj_pointers.dimension[i*MAX_DIMENSIONS_OBJECTS+j];
+            dim[j] = gpu_obj_pointers.dimension[obj_id*MAX_DIMENSIONS_OBJECTS+j];
         }
         if (identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] == -1) {
-            if (is_in_sphere(x, y, gpu_obj_pointers.pos_x[i], gpu_obj_pointers.pos_y[i], gpu_obj_pointers.pos_z[i], dim[0])) {
-                int is_in = is_in_object(x, y, gpu_obj_pointers.type[i]
-                                    , gpu_obj_pointers.pos_x[i], gpu_obj_pointers.pos_y[i], gpu_obj_pointers.pos_z[i]
-                                    , gpu_obj_pointers.rot_x[i], gpu_obj_pointers.rot_y[i], gpu_obj_pointers.rot_z[i]
-                                    , dim);
-                if (is_in != -1) {
-                    identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = i;
-                    identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = is_in;
-                }
+            int is_in = is_in_object(x, y, gpu_obj_pointers.type[obj_id]
+                                , gpu_obj_pointers.pos_x[obj_id], gpu_obj_pointers.pos_y[obj_id], gpu_obj_pointers.pos_z[obj_id]
+                                , gpu_obj_pointers.rot_x[obj_id], gpu_obj_pointers.rot_y[obj_id], gpu_obj_pointers.rot_z[obj_id]
+                                , dim);
+            if (is_in != -1) {
+                identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = obj_id;
+                identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = is_in;
             }
-        } else if (gpu_obj_pointers.pos_z[i] < gpu_obj_pointers.pos_z[identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width]]) {
-            if (is_in_sphere(x, y, gpu_obj_pointers.pos_x[i], gpu_obj_pointers.pos_y[i], gpu_obj_pointers.pos_z[i], dim[0])) {
-                int is_in = is_in_object(x, y, gpu_obj_pointers.type[i]
-                                    , gpu_obj_pointers.pos_x[i], gpu_obj_pointers.pos_y[i], gpu_obj_pointers.pos_z[i]
-                                    , gpu_obj_pointers.rot_x[i], gpu_obj_pointers.rot_y[i], gpu_obj_pointers.rot_z[i]
+        } else if (gpu_obj_pointers.pos_z[obj_id] < gpu_obj_pointers.pos_z[identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width]]) {
+            if (is_in_sphere(x, y, gpu_obj_pointers.pos_x[obj_id], gpu_obj_pointers.pos_y[obj_id], gpu_obj_pointers.pos_z[obj_id], dim[0])) {
+                int is_in = is_in_object(x, y, gpu_obj_pointers.type[obj_id]
+                                    , gpu_obj_pointers.pos_x[obj_id], gpu_obj_pointers.pos_y[obj_id], gpu_obj_pointers.pos_z[obj_id]
+                                    , gpu_obj_pointers.rot_x[obj_id], gpu_obj_pointers.rot_y[obj_id], gpu_obj_pointers.rot_z[obj_id]
                                     , dim);
                 if (is_in != -1) {
-                    identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = i;
+                    identifier_array.id[height*IMAGE_RESOLUTION_WIDTH + width] = obj_id;
                     identifier_array.side[height*IMAGE_RESOLUTION_WIDTH + width] = is_in;
                 }
             }
@@ -1230,6 +1289,7 @@ int main (int argc, char** argv) {
 
     // Video Memory initialisation
     bool image_validity;
+    cudaDeviceSetCacheConfig(::cudaFuncCachePreferL1);
     cudaStream_t* gpu_stream;
     gpu_stream = new cudaStream_t[NB_STREAM];
     if (allocate_gpu_stream(gpu_stream)) return 1;
@@ -1241,7 +1301,7 @@ int main (int argc, char** argv) {
     gpu_object_pointers* gpu_obj_pointers;
     gpu_obj_pointers = new gpu_object_pointers[NB_STREAM];
     if (allocate_gpu_thread(numBlocks, threadsPerBlock)) return 1;
-    initiate_video_memory(gpu_id_array, gpu_image, gpu_obj_pointers, gpu_stream);
+    initiate_video_memory(gpu_id_array, gpu_image, gpu_obj_pointers, gpu_stream, numBlocks);
     copy_initial_data_to_video_memory_for_all_streams(gpu_obj_pointers, tab_pos, gpu_stream);
     for (int i=0; i<NB_STREAM; i++) gpu_obj_pointers[i].state = NONE;
 
@@ -1262,7 +1322,9 @@ int main (int argc, char** argv) {
         image_validity = draw_image(tab_pos, image, gpu_id_array, gpu_image, gpu_obj_pointers, gpu_stream, numBlocks, threadsPerBlock);
         if (DEBUG_PERF) {
             benchmark_performance(i, before_image_draw, time_table, gpu_obj_pointers, gpu_stream);
-            reinit_terminal(i);
+            if (KEEP_VALUES_HISTORIC==false) {
+                reinit_terminal(i);
+            }
             print_intermediate_bench_values(i, time_table);
             compute_bench_values(i, bench_values, time_table);
         }
