@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <chrono> 
+#include <omp.h>
 using namespace std;
 
 double gravity = 0; 
@@ -182,7 +183,7 @@ bool checkRigidNoAngleCollision(const RigidBody& a, const RigidBody& b) {
 }
 
 //collision between two Rigid bodies in Oriented Bounding Box 
-bool checkOBBCollision(const RigidBody& A, const RigidBody& B) {
+/*bool checkOBBCollision(const RigidBody& A, const RigidBody& B) {
     
     //vector AB
     Point3D T = {B.getCenter().x - A.getCenter().x,
@@ -275,6 +276,101 @@ bool checkOBBCollision(const RigidBody& A, const RigidBody& B) {
 
     // No separating axis found = collision
     return true;
+} */
+
+bool checkOBBCollision(const RigidBody& A, const RigidBody& B) {
+    
+    // Vecteur entre les centres
+    Point3D T = {B.getCenter().x - A.getCenter().x,
+                 B.getCenter().y - A.getCenter().y,
+                 B.getCenter().z - A.getCenter().z};
+
+    double ra, rb, t;
+    double R[3][3];
+    double AbsR[3][3];
+    const double EPSILON = 1e-6;
+    
+    // --- 1. Calcul de la Matrice de Rotation (SIMD OK) ---
+    // C'est ici que tu justifies ton "Micro-parallélisme" dans les slides.
+    for(int i=0; i<3; i++) {
+        const Point3D& Ai = A.getAxis(i);
+        
+        // Le SIMD fonctionne bien ici car c'est un calcul pur sans conditions
+        #pragma omp simd
+        for(int j=0; j<3; j++) {
+            const Point3D& Bj = B.getAxis(j);
+            R[i][j] = Ai.x*Bj.x + Ai.y*Bj.y + Ai.z*Bj.z;
+            AbsR[i][j] = std::abs(R[i][j]) + EPSILON;
+        }
+    }
+
+    // --- 2. Test des Axes de A ---
+    for(int i=0; i<3; i++){
+        const Point3D& Ai = A.getAxis(i);
+        switch(i) {
+            case 0: ra = A.getLength() / 2; break;
+            case 1: ra = A.getHeight() / 2; break;
+            case 2: ra = A.getWidth() / 2; break;
+        }
+        rb = B.getLength()/2 * AbsR[i][0] + B.getHeight()/2 * AbsR[i][1] + B.getWidth()/2 * AbsR[i][2];
+        t = std::abs(T.x * Ai.x + T.y * Ai.y + T.z * Ai.z);
+        
+        if(t > ra + rb) return false; // Séparation trouvée
+    }
+
+    // --- 3. Test des Axes de B ---
+    for(int i=0; i<3; i++){
+        const Point3D& Bi = B.getAxis(i);
+        ra = A.getLength()/2 * AbsR[0][i] + A.getHeight()/2 * AbsR[1][i] + A.getWidth()/2 * AbsR[2][i];
+        switch(i) {
+            case 0: rb = B.getLength() / 2; break;
+            case 1: rb = B.getHeight() / 2; break;
+            case 2: rb = B.getWidth() / 2; break;
+        };
+        t = std::abs(T.x * Bi.x + T.y * Bi.y + T.z * Bi.z);
+        
+        if(t > ra + rb) return false; // Séparation trouvée
+    }
+
+    // --- 4. Test des 9 Produits Vectoriels (Cross Products) ---
+    // On utilise la boucle imbriquée classique car on a besoin du "return false" immédiat.
+    // Les switch/case rendent le SIMD inefficace ici de toute façon.
+    for(int i=0; i<3; i++){
+        const Point3D& Ai = A.getAxis(i);
+        
+        for(int j=0; j<3; j++){
+             const Point3D& Bj = B.getAxis(j);
+
+            // ra = projection de A sur l'axe du produit vectoriel
+            switch(i) {
+                case 0: ra = A.getHeight()/2 * AbsR[1][j] + A.getWidth()/2 * AbsR[2][j]; break;
+                case 1: ra = A.getLength()/2 * AbsR[2][j] + A.getWidth()/2 * AbsR[0][j]; break;
+                case 2: ra = A.getHeight()/2 * AbsR[0][j] + A.getLength()/2 * AbsR[1][j]; break;
+            };
+
+            // rb = projection de B sur l'axe du produit vectoriel
+            switch(i) {
+                case 0: rb = B.getHeight()/2 * AbsR[i][1] + B.getWidth()/2 * AbsR[i][2]; break;
+                case 1: rb = B.getLength()/2 * AbsR[i][2] + B.getWidth()/2 * AbsR[i][0]; break;
+                case 2: rb = B.getHeight()/2 * AbsR[i][0] + B.getLength()/2 * AbsR[i][1]; break;
+            };
+
+            // t = distance projetée
+            // On calcule le produit vectoriel (Cross Product) à la volée
+            Point3D axis = { 
+                Ai.y*Bj.z - Ai.z*Bj.y,
+                Ai.z*Bj.x - Ai.x*Bj.z,
+                Ai.x*Bj.y - Ai.y*Bj.x
+            };
+
+            t = std::abs(T.x * axis.x + T.y * axis.y + T.z * axis.z);
+            
+            if(t > ra + rb) return false; // Séparation trouvée
+        }
+    }
+
+    // Si on arrive ici, aucun axe séparateur n'a été trouvé
+    return true;
 }
 
 //collision between sphere and moving rigid body
@@ -303,7 +399,8 @@ bool checkSphereRigidCollision(const Sphere& s, const RigidBody& b) {
 }
 
 
-// Test
+
+// Test /////////////////////////////
 void logStep(int step, double time, string msg) {
     cout << "[Step " << step << " | t=" << fixed << setprecision(2) << time << "] " << msg << endl;
 }
