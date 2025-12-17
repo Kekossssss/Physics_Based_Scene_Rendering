@@ -1,5 +1,10 @@
 #include <iostream>
 #include <cmath>
+#include <vector>
+#include <iomanip>
+#include <cstdlib>
+#include <ctime>
+#include <chrono> 
 using namespace std;
 
 double gravity = 0; 
@@ -297,22 +302,155 @@ bool checkSphereRigidCollision(const Sphere& s, const RigidBody& b) {
     return s.distance(closest) <= s.getRadius();
 }
 
+
+// Test
+void logStep(int step, double time, string msg) {
+    cout << "[Step " << step << " | t=" << fixed << setprecision(2) << time << "] " << msg << endl;
+}
+
+void testSphereCollisionSequence() {
+    cout << "\n--- TEST 1: Collision of moving Spheres ---\n";
+    Sphere s1({-5, 0, 0}, 2.0, {2, 0, 0}); 
+    Sphere s2({5, 0, 0}, 2.0, {-2, 0, 0});
+
+    double dt = 0.1;
+    for (int i = 0; i <= 20; i++) {
+        s1.update(dt);
+        s2.update(dt);
+
+        bool collide = checkSphereCollision(s1, s2);
+        
+        if (abs(s1.getCenter().x) < 3.0) {
+            cout << "S1: " << s1.getCenter().x << " | S2: " << s2.getCenter().x 
+                 << " -> Collision: " << (collide ? "YES" : "NO") << endl;
+        }
+    }
+}
+
+void testOBBRotation() {
+    cout << "\n--- TEST 2: Rotating Cubes (Test OBB) ---\n";
+    
+    Cube c1({0, 0, 0}, 2.0, {0, 0, 0}, {0, 0, 0}, {0, 0, 0});
+    
+    Cube c2({0, 5, 0}, 2.0, {0, -1, 0}, {0, 0, 0}, {0, 0, 1});
+
+    double dt = 0.1;
+    bool hit = false;
+
+    for (int i = 0; i < 40; i++) {
+        c2.update(dt); 
+
+        if (checkOBBCollision(c1, c2)) {
+            cout << "!! COLLISION DETECTED at t=" << i * dt 
+                 << " | C2 Y=" << c2.getCenter().y 
+                 << " | Angle Z=" << fixed << setprecision(2) << 3.14159
+                 << endl;
+            hit = true;
+            break; 
+        }
+    }
+    
+    if (!hit) cout << "test failed : no collision détected." << endl;
+}
+
+void testMixedCollision() {
+    cout << "\n--- TEST 3: Sphere vs Rigid Box ---\n";
+    RectangularPrism sol({0, -2, 0}, 1, 10, 10, {0,0,0}, {0,0,0}, {0,0,0});
+    
+    Sphere s({0, 5, 0}, 2.0, {0, -2, 0});
+
+    double dt = 0.1;
+    for(int i=0; i<30; i++) {
+        s.update(dt);
+        if (checkSphereRigidCollision(s, sol)) {
+            cout << "Impact Sphere-Sol a t=" << i*dt << " Hauteur S=" << s.getCenter().y << endl;
+            break;
+        }
+    }
+}
+
+double randDouble(double min, double max) {
+    return min + (double)rand() / RAND_MAX * (max - min);
+}
+
 int main() {
-    Sphere s1({0,0,0}, 2, {0,0,0});
-    Sphere s2({1,0,0}, 2, {0,0,0});
+    srand(time(0));
+    
+    // 1. CONFIGURATION
+    int N = 2000;
+    int STEPS = 50;
+    double dt = 0.01;
+    
+    vector<Shape*> shapes;
+    
+    cout << "Initialisation of " << N << " object" << endl;
+    
+    // 2. GENERATION
+    for(int i=0; i<N; i++) {
+        Point3D pos = {randDouble(-50,50), randDouble(-50,50), randDouble(-50,50)};
+        Point3D vel = {randDouble(-5,5), randDouble(-5,5), randDouble(-5,5)};
+        
+        if (i % 2 == 0) {
+            shapes.push_back(new Sphere(pos, randDouble(1, 3), vel));
+        } else {
+            Point3D angle = {randDouble(0, 3), randDouble(0, 3), randDouble(0, 3)};
+            Point3D angVel = {randDouble(-1, 1), randDouble(-1, 1), randDouble(-1, 1)};
+            shapes.push_back(new Cube(pos, randDouble(1, 3), vel, angle, angVel));
+        }
+    }
 
-    if (checkSphereCollision(s1, s2))
-        cout << "Collision detected!\n";
-    else
-        cout << "No collision.\n";
+    cout << "Beginning of the simulation..." << endl;
+    auto start = std::chrono::high_resolution_clock::now();
+    
+    long long collisionsDetected = 0;
 
-    Cube c1({0,0,0}, 2, {0,0,0}, {0,0,0}, {0,0,0});
-    Cube c2({3,0,0}, 2, {0,0,0}, {0,0,0}, {0,0,0});
+    // 3. SIMULATION LOOP
+    for(int step=0; step<STEPS; step++) {
+        
+        #pragma omp parallel for
+        for(int i=0; i<N; i++) {
+            shapes[i]->update(dt);
+        }
+        
+        // B. Collision Detection
+        // collapse(2) : fusionne les boucles i et j pour faire un seul gros tas de tâches
+        // schedule(dynamic) : important car certains tests (Cube-Cube) sont plus longs que d'autres (Sphere-Sphere)
+        // reduction(+:collisionsDetected) : chaque thread compte dans son coin, et on additionne tout à la fin
+        
+        #pragma omp parallel for schedule(dynamic) reduction(+:collisionsDetected)
+        for(int i=0; i<N; i++) {
+            for(int j=i+1; j<N; j++) {
+                
+                bool collision = false;
+                
+                // ... (votre logique de dynamic_cast reste identique) ...
+                Sphere* s1 = dynamic_cast<Sphere*>(shapes[i]);
+                Sphere* s2 = dynamic_cast<Sphere*>(shapes[j]);
+                RigidBody* r1 = dynamic_cast<RigidBody*>(shapes[i]);
+                RigidBody* r2 = dynamic_cast<RigidBody*>(shapes[j]);
 
-    if (checkOBBCollision(c1, c2))
-        cout << "Cube collision detected!\n";
-    else
-        cout << "No cube collision.\n";
+                if(s1 && s2) collision = checkSphereCollision(*s1, *s2);
+                else if(r1 && r2) collision = checkOBBCollision(*r1, *r2);
+                else if(s1 && r2) collision = checkSphereRigidCollision(*s1, *r2);
+                else if(r1 && s2) collision = checkSphereRigidCollision(*s2, *r1);
 
+                if(collision) {
+                    collisionsDetected++; 
+                }
+            }
+        }
+    }
+    
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> diff = end - start;
+
+    cout << "------------------------------------------------" << endl;
+    cout << "Time spent : " << diff.count() << " s" << endl;
+    cout << "Collisions   : " << collisionsDetected << endl;
+    cout << "Performance  : " << (double)(N*N*STEPS)/diff.count() / 1e6 << " MTests/sec" << endl;
+    cout << "------------------------------------------------" << endl;
+
+    for(auto s : shapes) delete s;
+    
     return 0;
 }
