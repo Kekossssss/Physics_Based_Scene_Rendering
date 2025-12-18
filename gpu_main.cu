@@ -1598,7 +1598,7 @@ int main(int argc, char **argv)
 {
     printf("Program Starting");
 
-    int num_threads = atoi(argv[2]);
+    int num_threads = 5;
 
     // Performance debug values
     auto start = std::chrono::high_resolution_clock::now();
@@ -1630,7 +1630,7 @@ int main(int argc, char **argv)
     int numObjects = convertSceneToGPU(shapes, gpuScene, true);
     std::cout << "Converted " << numObjects << " objects\n";
 
-    double dt = 0.016 * atoi(argv[1]);
+    double dt = 0.016 * 5;
 
     // Double buffering: two image arrays
     image_array image_current, image_backup;
@@ -1682,7 +1682,6 @@ int main(int argc, char **argv)
     printf("Initialisation finished, Waiting to start\n");
     sleep(5);
     
-    int x = atoi(argv[3]);
 
     auto after_init = std::chrono::high_resolution_clock::now();
     if (DEBUG_PERF)
@@ -1718,6 +1717,8 @@ int main(int argc, char **argv)
         {
             shape->update(dt);
         }
+        
+        convertSceneToGPU(shapes, tab_pos, true);
 
         double time_render = std::chrono::duration<double, std::milli>(end_render - start_render).count();
 
