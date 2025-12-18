@@ -15,13 +15,15 @@
 
 #include "cpu_converter.hpp"
 #include "cpu_renderer.hpp"
+#include "cpu_part_collisions.hpp"
 
 #include <stdlib.h>
 #include <iostream>
 #include <thread>
 #include <pthread.h>
 
-double gravity = 9.81;
+// Gravity defined in physics module
+extern double gravity;
 
 // ============================================================================
 // PTHREAD STRUCTURES
@@ -35,25 +37,99 @@ struct ThreadData
     double dt;
 };
 
-struct BMPThreadData
+struct MP4FrameData
 {
     image_array *image;
-    int start_row;
-    int end_row;
-    FILE *file;
-    unsigned char *row_buffer;
-    pthread_mutex_t *file_mutex;
-};
-
-struct PipelineData
-{
-    image_array *image;
-    char filename[256];
-    int num_threads;
+    unsigned char *rgb_buffer;
     bool ready;
     bool done;
     pthread_mutex_t mutex;
     pthread_cond_t cond;
+};
+
+// ============================================================================
+// MP4 VIDEO ENCODER CLASS
+// ============================================================================
+
+class MP4VideoEncoder
+{
+private:
+    FILE *ffmpeg_pipe;
+    int width;
+    int height;
+    int fps;
+    bool is_open;
+
+public:
+    MP4VideoEncoder(const char *filename, int w, int h, int framerate = 60)
+        : width(w), height(h), fps(framerate), is_open(false)
+    {
+        // Build FFmpeg command
+        char command[512];
+        snprintf(command, sizeof(command),
+                "singularity exec ffmpeg_latest.sif "
+         "ffmpeg -y -f rawvideo -pixel_format rgb24 -video_size %dx%d "
+         "-framerate %d -i - -c:v libx264 -preset ultrafast -crf 18 "
+         "-pix_fmt yuv420p -movflags +faststart %s",
+                 width, height, fps, filename); //2>/dev/null
+
+        std::cout << "Opening FFmpeg pipe...\n";
+        ffmpeg_pipe = popen(command, "w");
+
+        if (ffmpeg_pipe)
+        {
+            is_open = true;
+            std::cout << "FFmpeg encoder started: " << filename << "\n";
+        }
+        else
+        {
+            std::cerr << "ERROR: Failed to open FFmpeg pipe!\n";
+            std::cerr << "Make sure FFmpeg is installed: sudo apt install ffmpeg\n";
+        }
+    }
+
+    bool writeFrame(const image_array &image)
+    {
+        if (!is_open)
+            return false;
+
+        // Convert RGBA to RGB24 (FFmpeg format)
+        unsigned char *rgb_buffer = new unsigned char[width * height * 3];
+
+        for (int i = 0; i < width * height; i++)
+        {
+            rgb_buffer[i * 3 + 0] = image.red[i];
+            rgb_buffer[i * 3 + 1] = image.green[i];
+            rgb_buffer[i * 3 + 2] = image.blue[i];
+        }
+
+        // Write frame to FFmpeg
+        size_t written = fwrite(rgb_buffer, 1, width * height * 3, ffmpeg_pipe);
+        delete[] rgb_buffer;
+
+        return (written == (size_t)(width * height * 3));
+    }
+
+    bool writeFrameRGB(const unsigned char *rgb_buffer)
+    {
+        if (!is_open)
+            return false;
+
+        size_t written = fwrite(rgb_buffer, 1, width * height * 3, ffmpeg_pipe);
+        fflush(ffmpeg_pipe);  
+
+        return (written == (size_t)(width * height * 3));
+    }
+
+    ~MP4VideoEncoder()
+    {
+        if (is_open)
+        {
+            std::cout << "Closing FFmpeg encoder...\n";
+            fflush(ffmpeg_pipe);  
+            pclose(ffmpeg_pipe);
+        }
+    }
 };
 
 // ============================================================================
@@ -70,34 +146,8 @@ void *updateShapesThread(void *arg)
     return nullptr;
 }
 
-void *saveBMPThread(void *arg)
-{
-    BMPThreadData *data = (BMPThreadData *)arg;
-
-    for (int y = data->start_row; y < data->end_row; y++)
-    {
-        int row_start = y * IMAGE_RESOLUTION_WIDTH;
-
-        for (int x = 0; x < IMAGE_RESOLUTION_WIDTH; x++)
-        {
-            int idx = row_start + x;
-            int buffer_idx = x * 3;
-            data->row_buffer[buffer_idx] = data->image->blue[idx];
-            data->row_buffer[buffer_idx + 1] = data->image->green[idx];
-            data->row_buffer[buffer_idx + 2] = data->image->red[idx];
-        }
-
-        pthread_mutex_lock(data->file_mutex);
-        fseek(data->file, 54 + y * (IMAGE_RESOLUTION_WIDTH * 3), SEEK_SET);
-        fwrite(data->row_buffer, 1, IMAGE_RESOLUTION_WIDTH * 3, data->file);
-        pthread_mutex_unlock(data->file_mutex);
-    }
-
-    return nullptr;
-}
-
 // ============================================================================
-// PARALLEL UPDATE FUNCTIONS
+// PARALLEL UPDATE
 // ============================================================================
 
 void updateShapesParallel(std::vector<Shape *> &shapes, double dt, int num_threads)
@@ -131,105 +181,104 @@ void updateShapesParallel(std::vector<Shape *> &shapes, double dt, int num_threa
 }
 
 // ============================================================================
-// PARALLEL BMP SAVE
+// PARALLEL RGB CONVERSION
 // ============================================================================
 
-bool save_as_bmp_parallel(image_array &image, const char *filename, int num_threads = 4)
+struct RGBConversionData
 {
-    FILE *file = fopen(filename, "wb");
-    if (!file)
-        return false;
+    const image_array *image;
+    unsigned char *rgb_buffer;
+    int start_idx;
+    int end_idx;
+};
 
-    // BMP Header
-    unsigned char bmp_header[54] = {
-        'B', 'M', 0, 0, 0, 0, 0, 0, 0, 0, 54, 0, 0, 0, 40, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+void *convertToRGBThread(void *arg)
+{
+    RGBConversionData *data = (RGBConversionData *)arg;
 
-    int width = IMAGE_RESOLUTION_WIDTH;
-    int height = IMAGE_RESOLUTION_HEIGHT;
-    int file_size = 54 + width * height * 3;
+    for (int i = data->start_idx; i < data->end_idx; i++)
+    {
+        data->rgb_buffer[i * 3 + 0] = data->image->red[i];
+        data->rgb_buffer[i * 3 + 1] = data->image->green[i];
+        data->rgb_buffer[i * 3 + 2] = data->image->blue[i];
+    }
 
-    *((int *)&bmp_header[2]) = file_size;
-    *((int *)&bmp_header[18]) = width;
-    *((int *)&bmp_header[22]) = height;
+    return nullptr;
+}
 
-    fwrite(bmp_header, 1, 54, file);
-
+void convertToRGBParallel(const image_array &image, unsigned char *rgb_buffer, int num_threads = 4)
+{
+    int total_pixels = IMAGE_RESOLUTION_WIDTH * IMAGE_RESOLUTION_HEIGHT;
     pthread_t *threads = new pthread_t[num_threads];
-    BMPThreadData *thread_data = new BMPThreadData[num_threads];
-    pthread_mutex_t file_mutex;
-    pthread_mutex_init(&file_mutex, nullptr);
+    RGBConversionData *thread_data = new RGBConversionData[num_threads];
 
-    int rows_per_thread = height / num_threads;
-    int remainder = height % num_threads;
+    int pixels_per_thread = total_pixels / num_threads;
+    int remainder = total_pixels % num_threads;
     int current_start = 0;
 
     for (int i = 0; i < num_threads; i++)
     {
         thread_data[i].image = &image;
-        thread_data[i].start_row = current_start;
-        thread_data[i].end_row = current_start + rows_per_thread + (i < remainder ? 1 : 0);
-        thread_data[i].file = file;
-        thread_data[i].file_mutex = &file_mutex;
-        thread_data[i].row_buffer = new unsigned char[width * 3];
+        thread_data[i].rgb_buffer = rgb_buffer;
+        thread_data[i].start_idx = current_start;
+        thread_data[i].end_idx = current_start + pixels_per_thread + (i < remainder ? 1 : 0);
 
-        pthread_create(&threads[i], nullptr, saveBMPThread, &thread_data[i]);
-        current_start = thread_data[i].end_row;
+        pthread_create(&threads[i], nullptr, convertToRGBThread, &thread_data[i]);
+        current_start = thread_data[i].end_idx;
     }
 
     for (int i = 0; i < num_threads; i++)
     {
         pthread_join(threads[i], nullptr);
-        delete[] thread_data[i].row_buffer;
     }
 
-    pthread_mutex_destroy(&file_mutex);
     delete[] threads;
     delete[] thread_data;
-
-    fclose(file);
-    return true;
 }
 
 // ============================================================================
-// PIPELINE THREAD FOR ASYNC BMP SAVING
+// ASYNC VIDEO ENCODING THREAD
 // ============================================================================
 
-void *asyncBMPSaverThread(void *arg)
+struct VideoEncoderThreadData
 {
-    PipelineData *pipeline = (PipelineData *)arg;
+    MP4VideoEncoder *encoder;
+    MP4FrameData *frame_data;
+};
+
+void *asyncVideoEncoderThread(void *arg)
+{
+    VideoEncoderThreadData *data = (VideoEncoderThreadData *)arg;
+    MP4VideoEncoder *encoder = data->encoder;
+    MP4FrameData *frame_data = data->frame_data;
 
     while (true)
     {
-        pthread_mutex_lock(&pipeline->mutex);
+        pthread_mutex_lock(&frame_data->mutex);
 
-        // Wait for data to be ready
-        while (!pipeline->ready && !pipeline->done)
+        // Wait for frame to be ready
+        while (!frame_data->ready && !frame_data->done)
         {
-            pthread_cond_wait(&pipeline->cond, &pipeline->mutex);
+            pthread_cond_wait(&frame_data->cond, &frame_data->mutex);
         }
 
-        if (pipeline->done)
+        if (frame_data->done)
         {
-            pthread_mutex_unlock(&pipeline->mutex);
+            pthread_mutex_unlock(&frame_data->mutex);
             break;
         }
 
-        // Take ownership of the image to save
-        image_array *img_to_save = pipeline->image;
-        char filename[256];
-        strcpy(filename, pipeline->filename);
-        int num_threads = pipeline->num_threads;
+        // Take ownership of the buffer
+        unsigned char *rgb_to_encode = frame_data->rgb_buffer;
+        frame_data->ready = false;
 
-        pipeline->ready = false;
-        pthread_mutex_unlock(&pipeline->mutex);
+        pthread_mutex_unlock(&frame_data->mutex);
 
-        // Save the image (unlocked, allows next frame to compute)
-        save_as_bmp_parallel(*img_to_save, filename, num_threads);
+        // Encode frame (unlocked - allows next frame to prepare)
+        encoder->writeFrameRGB(rgb_to_encode);
 
-        // Signal that save is complete
-        pthread_cond_signal(&pipeline->cond);
+        // Signal completion
+        pthread_cond_signal(&frame_data->cond);
     }
 
     return nullptr;
@@ -248,7 +297,7 @@ void copyImageArray(const image_array &src, image_array &dst)
     memcpy(dst.alpha, src.alpha, size);
 }
 
-#define RENDERED_FRAMES 100
+#define RENDERED_FRAMES 1000
 
 //------------------------------------------------------------------------------------------//
 // CPU Functions (Video Memory Management)
@@ -1265,7 +1314,7 @@ bool draw_image(object_to_gpu &tab_pos, image_array &image, id_array *identifier
         }
         else
         {
-            //#pragma omp parallel for num_threads(NB_STREAM) schedule(static)
+            #pragma omp parallel for num_threads(NB_STREAM) schedule(static)
             for (int i = 0; i < 2; i++)
             {
                 // Synchronize with GPU stream to be sure that last operations are finished
@@ -1349,7 +1398,7 @@ bool draw_image(object_to_gpu &tab_pos, image_array &image, id_array *identifier
         }
         else
         {
-            //#pragma omp parallel for num_threads(NB_STREAM) schedule(static)
+            #pragma omp parallel for num_threads(NB_STREAM) schedule(static)
             for (int i = 0; i < 3; i++)
             {
                 // Synchronize with GPU stream to be sure that last operations are finished
@@ -1393,11 +1442,31 @@ bool draw_image(object_to_gpu &tab_pos, image_array &image, id_array *identifier
 }
 
 //------------------------------------------------------------------------------------------//
+// Convenience wrappers: draw directly from CPU shapes (GPU pipeline)
+//------------------------------------------------------------------------------------------//
+
+// Convert full scene and call GPU pipeline
+bool draw_image_gpu_from_shapes(const std::vector<Shape *> &shapes, image_array &image, id_array *identifier_array, image_array *gpu_image, gpu_object_pointers *gpu_obj_pointers, cudaStream_t *gpu_stream, dim3 numBlocks, dim3 threadsPerBlock, bool randomColors = true)
+{
+    object_to_gpu tab_pos;
+    int numObjects = convertSceneToGPU(shapes, tab_pos, randomColors);
+    (void)numObjects; // currently not used by GPU pipeline, kept for future use
+    return draw_image(tab_pos, image, identifier_array, gpu_image, gpu_obj_pointers, gpu_stream, numBlocks, threadsPerBlock);
+}
+
+// Update only physics state (efficient) and then call GPU pipeline
+bool draw_image_gpu_with_update(const std::vector<Shape *> &shapes, object_to_gpu &tab_pos, int numObjects, image_array &image, id_array *identifier_array, image_array *gpu_image, gpu_object_pointers *gpu_obj_pointers, cudaStream_t *gpu_stream, dim3 numBlocks, dim3 threadsPerBlock)
+{
+    updateGPUPhysicsState(shapes, tab_pos, numObjects);
+    return draw_image(tab_pos, image, identifier_array, gpu_image, gpu_obj_pointers, gpu_stream, numBlocks, threadsPerBlock);
+}
+
+//------------------------------------------------------------------------------------------//
 // Benchmark debug functions
 //------------------------------------------------------------------------------------------//
 void benchmark_performance(int i, std::chrono::_V2::system_clock::time_point before_image_draw, time_benchmarking *time_table, gpu_object_pointers *gpu_obj_pointers, cudaStream_t *gpu_stream)
 {
-    //#pragma omp parallel for num_threads(NB_STREAM) schedule(static)
+    #pragma omp parallel for num_threads(NB_STREAM) schedule(static)
     for (int st = 0; st < NB_STREAM; st++)
     {
         if (gpu_obj_pointers[st].state != NONE)
@@ -1607,7 +1676,8 @@ void compute_bench_values(int i, values_benchmarking &bench_values, time_benchma
 //------------------------------------------------------------------------------------------//
 int main(int argc, char **argv)
 {
-    printf("Program Starting");
+    printf("Program Starting\n");
+    const char *output_file = (argc >= 4) ? argv[3] : "output.mp4";
 
     int num_threads = 5;
 
@@ -1635,13 +1705,19 @@ int main(int argc, char **argv)
     shapes.push_back(new RectangularPrism(Point3D(100, 100, 50), 400, 300, 200,
                                           Point3D(5, 5, 0), Point3D(0, 0, 0),
                                           Point3D(0, 0, 0)));
+    shapes.push_back(new RectangularPrism(Point3D(1200, 400, 50), 1000, 50, 1000,
+                                          Point3D(5, 5, 0), Point3D(0, 0, 0),
+                                          Point3D(0, 0, 0)));
+
+    shapes.push_back(new RectangularPrism(Point3D(400, 400, 50), 1000, 50, 1000,
+                                          Point3D(5, 5, 0), Point3D(0, 0, 0),
+                                          Point3D(0, 0, 0)));
 
     // GPU conversion
-    object_to_gpu gpuScene;
-    int numObjects = convertSceneToGPU(shapes, gpuScene, true);
+    int numObjects = convertSceneToGPU(shapes, tab_pos, true);
     std::cout << "Converted " << numObjects << " objects\n";
 
-    double dt = 0.016 * 5;
+    double dt = 1 / 60;
 
     // Double buffering: two image arrays
     image_array image_current, image_backup;
@@ -1657,18 +1733,39 @@ int main(int argc, char **argv)
     image_backup.blue = new unsigned char[RESOLUTION];
     image_backup.alpha = new unsigned char[RESOLUTION];
 
-    std::cout << "Test1";
+    memset(image_current.red, 128, img_size);
+    memset(image_current.green, 128, img_size);
+    memset(image_current.blue, 128, img_size);
+    memset(image_current.alpha, 255, img_size);
 
     // Setup pipeline for async BMP saving
-    PipelineData pipeline;
-    pipeline.ready = false;
-    pipeline.done = false;
-    pipeline.num_threads = num_threads;
-    pthread_mutex_init(&pipeline.mutex, nullptr);
-    pthread_cond_init(&pipeline.cond, nullptr);
+    // Double buffering for RGB data (for FFmpeg)
+    unsigned char *rgb_buffer_1 = new unsigned char[img_size * 3];
+    unsigned char *rgb_buffer_2 = new unsigned char[img_size * 3];
 
-    pthread_t saver_thread;
-    pthread_create(&saver_thread, nullptr, asyncBMPSaverThread, &pipeline);
+    // Create video encoder
+    MP4VideoEncoder encoder(output_file, IMAGE_RESOLUTION_WIDTH, IMAGE_RESOLUTION_HEIGHT, 60);
+
+    // Setup async encoding pipeline
+    MP4FrameData frame_data;
+    frame_data.ready = false;
+    frame_data.done = false;
+    frame_data.rgb_buffer = rgb_buffer_1;
+    pthread_mutex_init(&frame_data.mutex, nullptr);
+    pthread_cond_init(&frame_data.cond, nullptr);
+
+    VideoEncoderThreadData encoder_thread_data;
+    encoder_thread_data.encoder = &encoder;
+    encoder_thread_data.frame_data = &frame_data;
+
+    pthread_t encoder_thread;
+    pthread_create(&encoder_thread, nullptr, asyncVideoEncoderThread, &encoder_thread_data);
+
+    auto start_total = std::chrono::high_resolution_clock::now();
+
+    // Track which RGB buffer to use (ping-pong)
+    unsigned char *current_rgb = rgb_buffer_1;
+    unsigned char *backup_rgb = rgb_buffer_2;
 
     // Video Memory initialisation
     bool image_validity;
@@ -1700,6 +1797,10 @@ int main(int argc, char **argv)
         std::chrono::duration<double, std::milli> duration_after_init = after_init - start;
         printf("Execution time after initialisation: %f ms\n", duration_after_init.count());
     }
+    
+    long long collisionsDetected = 0;
+    long long collisionsResolved = 0;
+
     printf("--------------Start Rendering---------------\n");
     for (int i = 0; i < RENDERED_FRAMES; i++)
     {
@@ -1712,8 +1813,8 @@ int main(int argc, char **argv)
         
         // ---- PHASE 2: Update GPU state & Render ----
         auto start_render = std::chrono::high_resolution_clock::now();
-        updateGPUPhysicsState(shapes, gpuScene, numObjects);
-        image_validity = draw_image(tab_pos, image_current, gpu_id_array, gpu_image, gpu_obj_pointers, gpu_stream, numBlocks, threadsPerBlock);
+        // Use helper that updates physics state then invokes GPU pipeline
+        image_validity = draw_image_gpu_with_update(shapes, tab_pos, numObjects, image_current, gpu_id_array, gpu_image, gpu_obj_pointers, gpu_stream, numBlocks, threadsPerBlock);
         auto end_render = std::chrono::high_resolution_clock::now();
         if (DEBUG_PERF)
         {
@@ -1724,9 +1825,36 @@ int main(int argc, char **argv)
         }
 
         // Temporary positions updates for testing rendering techniques
-        for (auto shape : shapes)
+        int N = (int)shapes.size() - 1;
+        for (int i = 0;i < N;i++)
         {
-            shape->update(dt);
+            shapes[i]->update(dt);
+        }
+
+        bool resolveCollisions = true; // Enable/disable resolution step
+        #pragma omp parallel for schedule(dynamic) reduction(+:collisionsDetected,collisionsResolved)
+        for (int i = 0; i < N; i++) {
+            for (int j = i + 1; j < N; j++) {
+                bool collision = false;
+                
+                Sphere* s1 = dynamic_cast<Sphere*>(shapes[i]);
+                Sphere* s2 = dynamic_cast<Sphere*>(shapes[j]);
+                RigidBody* r1 = dynamic_cast<RigidBody*>(shapes[i]);
+                RigidBody* r2 = dynamic_cast<RigidBody*>(shapes[j]);
+
+                if(s1 && s2) {
+                    collision = checkSphereCollision(*s1, *s2);
+                    if(collision && resolveCollisions) {
+                        resolveSphereSphereCollision(s1, s2);
+                        collisionsResolved++;
+                    }
+                }
+                else if(r1 && r2) collision = checkOBBCollision(*r1, *r2);
+                else if(s1 && r2) collision = checkSphereRigidCollision(*s1, *r2);
+                else if(r1 && s2) collision = checkSphereRigidCollision(*s2, *r1);
+
+                if(collision) collisionsDetected++;
+            }
         }
         
         convertSceneToGPU(shapes, tab_pos, true);
@@ -1736,35 +1864,45 @@ int main(int argc, char **argv)
         // ---- PHASE 3: Copy to backup buffer ----
         synchronize_gpu_image(image_validity, gpu_obj_pointers, gpu_stream);
         if (image_validity) {
-            auto start_copy = std::chrono::high_resolution_clock::now();
-            copyImageArray(image_current, image_backup);
-            auto end_copy = std::chrono::high_resolution_clock::now();
-            double time_copy = std::chrono::duration<double, std::milli>(end_copy - start_copy).count();
+                // ---- PHASE 3: Convert to RGB (parallel) ----
+            auto start_convert = std::chrono::high_resolution_clock::now();
+            convertToRGBParallel(image_current, current_rgb, num_threads);
+            auto end_convert = std::chrono::high_resolution_clock::now();
+            double time_convert = std::chrono::duration<double, std::milli>(end_convert - start_convert).count();
 
-            // ---- PHASE 4: Wait for previous save to complete ----
+            // ---- PHASE 4: Wait for previous encode to complete ----
             auto start_wait = std::chrono::high_resolution_clock::now();
-            pthread_mutex_lock(&pipeline.mutex);
-            while (pipeline.ready)
+            pthread_mutex_lock(&frame_data.mutex);
+            while (frame_data.ready)
             {
-                pthread_cond_wait(&pipeline.cond, &pipeline.mutex);
+                pthread_cond_wait(&frame_data.cond, &frame_data.mutex);
             }
-            pthread_mutex_unlock(&pipeline.mutex);
+            pthread_mutex_unlock(&frame_data.mutex);
             auto end_wait = std::chrono::high_resolution_clock::now();
             double time_wait = std::chrono::duration<double, std::milli>(end_wait - start_wait).count();
 
-            // ---- PHASE 5: Queue save for backup buffer (async) ----
-            pthread_mutex_lock(&pipeline.mutex);
-            pipeline.image = &image_backup;
-            snprintf(pipeline.filename, sizeof(pipeline.filename), "frame.bmp");
-            pipeline.ready = true;
-            pthread_cond_signal(&pipeline.cond);
-            pthread_mutex_unlock(&pipeline.mutex);
+            // ---- PHASE 5: Queue encode (async) ----
+            pthread_mutex_lock(&frame_data.mutex);
+            frame_data.rgb_buffer = current_rgb;
+            frame_data.ready = true;
+            pthread_cond_signal(&frame_data.cond);
+            pthread_mutex_unlock(&frame_data.mutex);
 
-            auto frame_end = std::chrono::high_resolution_clock::now();
+            // Swap buffers for next frame
+            std::swap(current_rgb, backup_rgb);
 
-            std::cout << "Render:  " << time_render << " ms\n";
-            std::cout << "Copy:    " << time_copy << " ms\n";
-            std::cout << "Wait:    " << time_wait << " ms\n";
+            //auto frame_end = std::chrono::high_resolution_clock::now();
+            //double time_frame = std::chrono::duration<double, std::milli>(frame_end - frame_start).count();
+
+            if (i % 30 == 0)
+            {
+                //std::cout << "Update:   " << time_update << " ms\n";
+                std::cout << "Render:   " << time_render << " ms\n";
+                std::cout << "Convert:  " << time_convert << " ms\n";
+                std::cout << "Wait:     " << time_wait << " ms\n";
+                //std::cout << "Frame:    " << time_frame << " ms\n";
+                //std::cout << "FPS:      " << 1000.0 / time_frame << "\n";
+            }
         }
 
         // usleep(3000000);
@@ -1812,5 +1950,30 @@ int main(int argc, char **argv)
         }
         printf("-------------------------------------------------\n");
     }
+
+    // Wait for final encode
+    pthread_mutex_lock(&frame_data.mutex);
+    while (frame_data.ready)
+    {
+        pthread_cond_wait(&frame_data.cond, &frame_data.mutex);
+    }
+    pthread_mutex_unlock(&frame_data.mutex);
+
+    // Shutdown encoder thread
+    pthread_mutex_lock(&frame_data.mutex);
+    frame_data.done = true;
+    pthread_cond_signal(&frame_data.cond);
+    pthread_mutex_unlock(&frame_data.mutex);
+    pthread_join(encoder_thread, nullptr);
+
+    auto end_total = std::chrono::high_resolution_clock::now();
+    double duration_total = std::chrono::duration<double, std::milli>(end_total - start_total).count();
+
+    std::cout << "\n=== ENCODING COMPLETE ===\n";
+    std::cout << "Total time:     " << duration_total << " ms\n";
+    //std::cout << "Average frame:  " << duration_total / num_frames << " ms\n";
+    //std::cout << "Average FPS:    " << (num_frames * 1000.0) / duration_total << "\n";
+    std::cout << "Output file:    " << output_file << "\n";
+
     clean_video_memory(gpu_id_array, gpu_image, gpu_obj_pointers, gpu_stream);
 }

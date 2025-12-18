@@ -8,7 +8,7 @@
 #include <omp.h>
 using namespace std;
 
-double gravity = 0; 
+double gravity = 9.81; 
 
 struct Point3D {
     double x;

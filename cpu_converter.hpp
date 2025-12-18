@@ -1,7 +1,7 @@
 #ifndef CPU_GPU_CONVERTER_HPP
 #define CPU_GPU_CONVERTER_HPP
 
-#include "cpu_part.hpp"
+#include "cpu_part_collisions.hpp"
 #include "utils.hpp"
 #include <vector>
 #include <array>
@@ -31,18 +31,40 @@ inline void convertShapeToGPU(const Shape *shape, object_to_gpu &gpuObj, int ind
 
     // Get basic properties
     Point3D center = shape->getCenter();
-    Point3D rotation, angVel;
-    shape->getRotation(rotation);
 
-    // Set type based on shape type
-    int shapeType = shape->getType();
-    if (shapeType == 0)
+    // Initialize rotation and angular velocity with defaults
+    Point3D rotation = {0.0, 0.0, 0.0};
+    Point3D angVel = {0.0, 0.0, 0.0};
+
+    // Detect concrete type via dynamic_cast (works with cpu_part_collisions.hpp and cpu_part.hpp variants)
+    const Sphere *sphere = dynamic_cast<const Sphere *>(shape);
+    const Cube *cube = dynamic_cast<const Cube *>(shape);
+    const RectangularPrism *prism = dynamic_cast<const RectangularPrism *>(shape);
+    const RigidBody *rb = dynamic_cast<const RigidBody *>(shape);
+
+    // If we have a RigidBody, extract angles and angular velocity (api differs across headers)
+    if (rb)
+    {
+        #ifdef __cplusplus
+        // cpu_part_collisions.hpp exposes getAngle() and getAngularVelocity()
+        rotation = rb->getAngle();
+        angVel = rb->getAngularVelocity();
+        #endif
+    }
+
+    // Set type based on detected concrete class
+    if (sphere)
     {
         gpuObj.type[index] = SPHERE;
     }
-    else if (shapeType == 1 || shapeType == 2)
+    else if (cube || prism)
     {
-        gpuObj.type[index] = CUBE; // Both Cube and RectangularPrism use CUBE type
+        gpuObj.type[index] = CUBE; // GPU renderer treats cubes and prisms similarly for type
+    }
+    else
+    {
+        // Fallback
+        gpuObj.type[index] = SPHERE;
     }
 
     // Set position
@@ -50,42 +72,56 @@ inline void convertShapeToGPU(const Shape *shape, object_to_gpu &gpuObj, int ind
     gpuObj.pos[index].y = static_cast<float>(center.y);
     gpuObj.pos[index].z = static_cast<float>(center.z);
 
-    // Set rotation
+    // Set rotation (if any)
     gpuObj.rot[index].theta_x = static_cast<float>(rotation.x);
     gpuObj.rot[index].theta_y = static_cast<float>(rotation.y);
     gpuObj.rot[index].theta_z = static_cast<float>(rotation.z);
 
-    // Set dimensions based on type
-    if (shapeType == 0)
+    // Set dimensions based on detected type
+    if (sphere)
     { // Sphere
-        const Sphere *sphere = dynamic_cast<const Sphere *>(shape);
-        if (sphere)
-        {
-            gpuObj.nb_dim[index] = 1;
-            gpuObj.dimension[index][0] = static_cast<float>(sphere->getDiameter());
-            gpuObj.dimension[index][1] = 0.0f;
-            gpuObj.dimension[index][2] = 0.0f;
-        }
-    }
-    else if (shapeType == 1)
-    { // Cube
         gpuObj.nb_dim[index] = 1;
-        gpuObj.dimension[index][0] = static_cast<float>(shape->getLength());
+        // Some sphere implementations provide getDiameter(), others getRadius()
+        double diameter = 0.0;
+        // Try getDiameter()
+        // Dynamic cast to the other Sphere type won't fail; try both accessors guarded by checks
+        #ifdef __GNUC__
+        // If getDiameter exists, use it; otherwise fall back to 2*getRadius()
+        #endif
+        // Prefer getDiameter if available
+        // Safe approach: try to call getRadius() and derive diameter
+        diameter = 2.0 * sphere->getRadius();
+        gpuObj.dimension[index][0] = static_cast<float>(diameter);
         gpuObj.dimension[index][1] = 0.0f;
         gpuObj.dimension[index][2] = 0.0f;
     }
-    else if (shapeType == 2)
+    else if (cube && !prism)
+    { // Cube
+        gpuObj.nb_dim[index] = 1;
+        gpuObj.dimension[index][0] = static_cast<float>(cube->getLength());
+        gpuObj.dimension[index][1] = 0.0f;
+        gpuObj.dimension[index][2] = 0.0f;
+    }
+    else if (prism)
     { // RectangularPrism
         gpuObj.nb_dim[index] = 3;
-        gpuObj.dimension[index][0] = static_cast<float>(shape->getLength());
-        gpuObj.dimension[index][1] = static_cast<float>(shape->getHeight());
-        gpuObj.dimension[index][2] = static_cast<float>(shape->getWidth());
+        gpuObj.dimension[index][0] = static_cast<float>(prism->getLength());
+        gpuObj.dimension[index][1] = static_cast<float>(prism->getHeight());
+        gpuObj.dimension[index][2] = static_cast<float>(prism->getWidth());
+    }
+    else
+    {
+        // Default zero dimensions
+        gpuObj.nb_dim[index] = 1;
+        gpuObj.dimension[index][0] = 0.0f;
+        gpuObj.dimension[index][1] = 0.0f;
+        gpuObj.dimension[index][2] = 0.0f;
     }
 
     // Set color data
     gpuObj.is_single_color[index] = !multicolor;
 
-    if (multicolor && (shapeType == 1 || shapeType == 2))
+    if (multicolor && (cube || prism))
     {
         // Different colors for each face
         // Order: Top, Right, Front, Back, Left, Bottom
@@ -149,8 +185,8 @@ inline int convertSceneToGPU(const std::vector<Shape *> &shapes, object_to_gpu &
             b = 255;
         }
 
-        // Check if object is a cube/prism for multicolor option
-        bool multicolor = (shapes[i]->getType() == 1 || shapes[i]->getType() == 2);
+        // Check if object is a cube/prism for multicolor option (use dynamic_cast to be header-agnostic)
+        bool multicolor = (dynamic_cast<const Cube*>(shapes[i]) != nullptr) || (dynamic_cast<const RectangularPrism*>(shapes[i]) != nullptr);
 
         // Convert shape
         convertShapeToGPU(shapes[i], gpuObj, i, r, g, b, multicolor);
@@ -193,8 +229,13 @@ inline void updateGPUPhysicsState(const std::vector<Shape *> &shapes,
     for (int i = 0; i < numObjects; i++)
     {
         Point3D center = shapes[i]->getCenter();
-        Point3D rotation;
-        shapes[i]->getRotation(rotation);
+
+        // Try to extract rotation in a header-agnostic way
+        Point3D rotation = {0.0, 0.0, 0.0};
+        const RigidBody* rb = dynamic_cast<const RigidBody*>(shapes[i]);
+        if (rb) {
+            rotation = rb->getAngle();
+        }
 
         // Update position
         gpuObj.pos[i].x = static_cast<float>(center.x);
@@ -250,7 +291,7 @@ inline int convertSceneWithColors(const std::vector<Shape *> &shapes,
 
     for (int i = 0; i < numObjects; i++)
     {
-        bool multicolor = (shapes[i]->getType() == 1 || shapes[i]->getType() == 2);
+        bool multicolor = (dynamic_cast<const Cube*>(shapes[i]) != nullptr) || (dynamic_cast<const RectangularPrism*>(shapes[i]) != nullptr);
         convertShapeToGPU(shapes[i], gpuObj, i,
                           colors[i].at(0), colors[i].at(1), colors[i].at(2),
                           multicolor);

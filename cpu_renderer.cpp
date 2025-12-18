@@ -1,4 +1,5 @@
 #include "utils.hpp"
+#include "cpu_renderer.hpp"
 
 //------------------------------------------------------------------------------------------//
 // Librairies
@@ -638,6 +639,23 @@ void draw_image_gold(object_to_gpu &tab_pos, image_array &image)
     {
         simple_anti_aliasing(image);
     }
+}
+
+// --- Conversion wrappers: draw directly from CPU shapes ---
+#include "cpu_renderer.hpp" // pulls in cpu_converter.hpp so we can convert shapes
+
+void draw_image(const std::vector<Shape*> &shapes, image_array &image, bool randomColors)
+{
+    object_to_gpu tab_pos;
+    convertSceneToGPU(shapes, tab_pos, randomColors);
+    draw_image(tab_pos, image);
+}
+
+void draw_image_gold(const std::vector<Shape*> &shapes, image_array &image, bool randomColors)
+{
+    object_to_gpu tab_pos;
+    convertSceneToGPU(shapes, tab_pos, randomColors);
+    draw_image_gold(tab_pos, image);
 }
 
 /*

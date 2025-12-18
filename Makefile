@@ -12,16 +12,16 @@ main_cpu:  main_cpu.cpp
 	g++ $(GCCFLAGS) utils.cpp cpu_renderer.cpp main_cpu.cpp -o main_cpu 
 
 main_gpu : gpu_main.cu
-	nvcc $(NVFLAGS) -o gpu_main gpu_main.cu utils.cpp
+	nvcc $(NVFLAGS) -o gpu_main gpu_main.cu utils.cpp cpu_part_collisions.cpp
 	
 main_gpu2 : gpu_main.cu
-	nvcc $(NVFLAGS) -o gpu_main gpu_main.cu utils.cpp
+	nvcc $(NVFLAGS) -o gpu_main gpu_main.cu utils.cpp cpu_part_collisions.cpp
 
 .PHONY: gpu
 all: gpu_exec
 
 gpu_exec: gpu_part.cu
-	nvcc $(NVFLAGS) -o gpu_exec gpu_part.cu utils.cpp
+	nvcc $(NVFLAGS) -o gpu_exec gpu_part.cu utils.cpp cpu_part_collisions.cpp
 
 .PHONY: cpu
 all: cpu_renderer
