@@ -10,6 +10,7 @@
 #include "utils.hpp"
 
 #include "cpu_renderer.hpp"
+#include "cpu_part.hpp"
 // Library used for sleep function
 #include <unistd.h>
 
@@ -19,28 +20,118 @@
 // Convert CPU Objects to GPU Objects
 //------------------------------------------------------------------------------------------//
 
-void cpu_objects_to_gpu_objects(std::vector<Shape*>& objects, const object_to_gpu& tab_pos) {
-    int n = objects.size();
+void convertShapeToGPU(const Shape *shape, GPUObjectData &gpuObj,
+                       unsigned char colorR = 255,
+                       unsigned char colorG = 255,
+                       unsigned char colorB = 255,
+                       bool multicolor = false)
+{
 
-    for (int i = 0;i < n;i++) {
-        switch (tab_pos.type[i]) {
-            case CUBE:
-                tab_pos.pos[i].x = objects[i].massCenter.x;
-                tab_pos.pos[i].y = objects[i].massCenter.y;
-                tab_pos.pos[i].z = objects[i].massCenter.z;
-                tab_pos.rot[i].theta_x = objects[i].angle.x;
-                tab_pos.rot[i].theta_y = objects[i].angle.y;
-                tab_pos.rot[i].theta_z = objects[i].angle.z;
+    // Get basic properties
+    Point3D center = shape->getCenter();
+    Point3D velocity = shape->getVelocity();
+    Point3D rotation, angVel;
+    shape->getRotation(rotation);
+    shape->getAngularVelocity(angVel);
 
-            case SPHERE:
-                tab_pos.pos[i].x = objects[i].massCenter.x;
-                tab_pos.pos[i].y = objects[i].massCenter.y;
-                tab_pos.pos[i].z = objects[i].massCenter.z;
+    // Set type
+    gpuObj.type = static_cast<unsigned char>(shape->getType());
 
-            default:
-                throw std::runtime_error("Error: Object type not recognized");
+    // Set position
+    gpuObj.pos_x = static_cast<float>(center.x);
+    gpuObj.pos_y = static_cast<float>(center.y);
+    gpuObj.pos_z = static_cast<float>(center.z);
+
+    // Set rotation
+    gpuObj.rot_x = static_cast<float>(rotation.x);
+    gpuObj.rot_y = static_cast<float>(rotation.y);
+    gpuObj.rot_z = static_cast<float>(rotation.z);
+
+    // Set velocity
+    gpuObj.vel_x = static_cast<float>(velocity.x);
+    gpuObj.vel_y = static_cast<float>(velocity.y);
+    gpuObj.vel_z = static_cast<float>(velocity.z);
+
+    // Set angular velocity
+    gpuObj.ang_vel_x = static_cast<float>(angVel.x);
+    gpuObj.ang_vel_y = static_cast<float>(angVel.y);
+    gpuObj.ang_vel_z = static_cast<float>(angVel.z);
+
+    // Initialize dimensions array
+    memset(gpuObj.dimensions, 0, sizeof(gpuObj.dimensions));
+
+    // Set dimensions based on type
+    if (gpuObj.type == 0)
+    { // Sphere
+        const Sphere *sphere = dynamic_cast<const Sphere *>(shape);
+        if (sphere)
+        {
+            gpuObj.dimensions[0] = static_cast<float>(sphere->getRadius() * 2); // diameter
         }
     }
+    else if (gpuObj.type == 1)
+    { // Cube
+        gpuObj.dimensions[0] = static_cast<float>(shape->getLength());
+    }
+    else if (gpuObj.type == 2)
+    { // RectangularPrism
+        gpuObj.dimensions[0] = static_cast<float>(shape->getLength());
+        gpuObj.dimensions[1] = static_cast<float>(shape->getHeight());
+        gpuObj.dimensions[2] = static_cast<float>(shape->getWidth());
+    }
+
+    // Set color data
+    gpuObj.is_single_color = !multicolor;
+
+    if (multicolor && (gpuObj.type == 1 || gpuObj.type == 2))
+    {
+        // Different colors for each face (Top, Right, Front, Back, Left, Bottom)
+        unsigned char faceColors[6][3] = {
+            {255, 255, 255}, // Top - White
+            {0, 0, 255},     // Right - Blue
+            {255, 0, 0},     // Front - Red
+            {255, 0, 255},   // Back - Magenta
+            {0, 255, 0},     // Left - Green
+            {255, 255, 0}    // Bottom - Yellow
+        };
+        for (int i = 0; i < 6; i++)
+        {
+            gpuObj.red[i] = faceColors[i][0];
+            gpuObj.green[i] = faceColors[i][1];
+            gpuObj.blue[i] = faceColors[i][2];
+        }
+    }
+    else
+    {
+        // Single color for all faces
+        gpuObj.red[0] = colorR;
+        gpuObj.green[0] = colorG;
+        gpuObj.blue[0] = colorB;
+        for (int i = 1; i < 6; i++)
+        {
+            gpuObj.red[i] = 0;
+            gpuObj.green[i] = 0;
+            gpuObj.blue[i] = 0;
+        }
+    }
+}
+
+int convertSceneToGPU(const std::vector<Shape *> &shapes, GPUObjectData *gpuObjects)
+{
+    int numObjects = shapes.size();
+
+    for (int i = 0; i < numObjects; i++)
+    {
+        // Default colors (can be customized)
+        unsigned char r = 100 + (i * 50) % 156;
+        unsigned char g = 100 + (i * 80) % 156;
+        unsigned char b = 100 + (i * 110) % 156;
+
+        // Convert with random colors
+        convertShapeToGPU(shapes[i], gpuObjects[i], r, g, b, false);
+    }
+
+    return numObjects;
 }
 
 //------------------------------------------------------------------------------------------//
@@ -66,13 +157,20 @@ int main(int argc, char **argv)
     double max_time = 0.0;
     double mean_time = 0.0;
 
-    Shape* s1 = new Cube({50.0,50.0,10.0}, 50.0, {0,0,0}, {0,0,0}, {0,0,0});
-    Shape* s2 = new Cube({50.0,50.0,40.0}, 100.0, {0,0,0}, {0,0,0}, {0,0,0});
-    Shape* s3 = new Cube({200.0,200.0,20.0}, 200.0, {0,0,0}, {0,0,0}, {0,0,0});
-    Shape* s4 = new Sphere({200.0,200.0,10.0}, 150.0, {0,0,0});
-    Shape* s5 = new Cube({100.0,100.0,50.0}, 400.0, {0,0,0}, {0,0,0}, {0,0,0});
+    // 1. CONFIGURATION
+    int N = 2000;
+    int STEPS = 50;
+    double dt = 0.01;
 
-    std::vector<Shape*> objects = {s1, s2, s3, s4, s5};
+    Shape *s1 = new Cube({50.0, 50.0, 10.0}, 50.0, {0, 0, 0}, {0, 0, 0}, {0, 0, 0});
+    Shape *s2 = new Cube({50.0, 50.0, 40.0}, 100.0, {0, 0, 0}, {0, 0, 0}, {0, 0, 0});
+    Shape *s3 = new Cube({200.0, 200.0, 20.0}, 200.0, {0, 0, 0}, {0, 0, 0}, {0, 0, 0});
+    Shape *s4 = new Sphere({200.0, 200.0, 10.0}, 150.0, {0, 0, 0});
+    Shape *s5 = new Cube({100.0, 100.0, 50.0}, 400.0, {0, 0, 0}, {0, 0, 0}, {0, 0, 0});
+
+    
+
+    std::vector<Shape *> objects = {s1, s2, s3, s4, s5};
 
     // Test objects positions
     object_to_gpu tab_pos;
@@ -225,21 +323,23 @@ int main(int argc, char **argv)
         }
 
         // Temporary positions updates for testing rendering techniques
-        for (auto obj : objects) {
+        for (auto obj : objects)
+        {
             obj->update(dt);
             obj->printPosition();
         }
 
         // Exemple collision simple pour RigidBody
-        RigidBody* r1 = dynamic_cast<RigidBody*>(s1);
-        RigidBody* r2 = dynamic_cast<RigidBody*>(s2);
-        if(r1 && r2 && checkRigidNoAngleCollision(*r1, *r2)) {
-            cout << "Collision Rigid Bodies!\n";
+        RigidBody *r1 = dynamic_cast<RigidBody *>(s1);
+        RigidBody *r2 = dynamic_cast<RigidBody *>(s2);
+        if (r1 && r2 && checkRigidNoAngleCollision(*r1, *r2))
+        {
+            std::cout << "Collision Rigid Bodies!\n";
         }
 
-        cout << "----------\n";
+        std::cout << "----------\n";
 
-        cpu_objects_to_gpu_objects(tab_pos, objects);
+        convertShapeToGPU(tab_pos, objects);
 
         // usleep(100000);
     }
