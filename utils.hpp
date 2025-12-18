@@ -23,7 +23,7 @@
 //------------------------------------------------------------------------------------------//
 #define USE_SYNCHRONOUS_GPU false
 #define ENABLE_MULTISTREAM true
-#define ENABLE_LOW_LATENCY_MULTISTREAM false
+#define ENABLE_LOW_LATENCY_MULTISTREAM true
 #if ENABLE_MULTISTREAM == true and USE_SYNCHRONOUS_GPU == false
 #   if ENABLE_LOW_LATENCY_MULTISTREAM == true
 #       define NB_STREAM 2
@@ -38,7 +38,7 @@
 // Global parameters definition
 //------------------------------------------------------------------------------------------//
 // Configurable DEBUG parameters
-#define DEBUG_PERF true
+#define DEBUG_PERF false
 #define DEBUG_VALUES false
 #if DEBUG_PERF == true
 #   define KEEP_VALUES_HISTORIC false
@@ -46,10 +46,10 @@
 #define ONLY_FINAL_FRAME false
 
 // Images resolution for the GPU to render
-#define IMAGE_RESOLUTION_WIDTH 1920
-#define IMAGE_RESOLUTION_WIDTH_FLOAT 1920.0
-#define IMAGE_RESOLUTION_HEIGHT 1080
-#define IMAGE_RESOLUTION_HEIGHT_FLOAT 1080.0
+#define IMAGE_RESOLUTION_WIDTH 640
+#define IMAGE_RESOLUTION_WIDTH_FLOAT 640.0
+#define IMAGE_RESOLUTION_HEIGHT 320
+#define IMAGE_RESOLUTION_HEIGHT_FLOAT 320.0
 #define RESOLUTION IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT
 
 // Image real size in the space
