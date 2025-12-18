@@ -1596,6 +1596,10 @@ void compute_bench_values(int i, values_benchmarking &bench_values, time_benchma
 //------------------------------------------------------------------------------------------//
 int main(int argc, char **argv)
 {
+    printf("Program Starting");
+
+    int num_threads = atoi(argv[2]);
+
     // Performance debug values
     auto start = std::chrono::high_resolution_clock::now();
     std::chrono::_V2::system_clock::time_point before_image_draw;
@@ -1642,6 +1646,8 @@ int main(int argc, char **argv)
     image_backup.blue = new unsigned char[RESOLUTION];
     image_backup.alpha = new unsigned char[RESOLUTION];
 
+    std::cout << "Test1";
+
     // Setup pipeline for async BMP saving
     PipelineData pipeline;
     pipeline.ready = false;
@@ -1675,6 +1681,8 @@ int main(int argc, char **argv)
 
     printf("Initialisation finished, Waiting to start\n");
     sleep(5);
+    
+    int x = atoi(argv[3]);
 
     auto after_init = std::chrono::high_resolution_clock::now();
     if (DEBUG_PERF)
@@ -1690,7 +1698,13 @@ int main(int argc, char **argv)
         {
             before_image_draw = std::chrono::high_resolution_clock::now();
         }
-        image_validity = draw_image(tab_pos, image, gpu_id_array, gpu_image, gpu_obj_pointers, gpu_stream, numBlocks, threadsPerBlock);
+        
+        
+        // ---- PHASE 2: Update GPU state & Render ----
+        auto start_render = std::chrono::high_resolution_clock::now();
+        updateGPUPhysicsState(shapes, gpuScene, numObjects);
+        image_validity = draw_image(tab_pos, image_current, gpu_id_array, gpu_image, gpu_obj_pointers, gpu_stream, numBlocks, threadsPerBlock);
+        auto end_render = std::chrono::high_resolution_clock::now();
         if (DEBUG_PERF)
         {
             benchmark_performance(i, before_image_draw, time_table, gpu_obj_pointers, gpu_stream);
@@ -1699,27 +1713,12 @@ int main(int argc, char **argv)
             compute_bench_values(i, bench_values, time_table);
         }
 
-        // Image output temporary function
-        if (ONLY_FINAL_FRAME == false)
-        {
-            if (image_validity == true and save_as_bmp(image, "test_image_gpu.bmp") == false)
-            {
-                printf("Image saving error, leaving loop\n");
-                break;
-            }
-        }
-
         // Temporary positions updates for testing rendering techniques
         for (auto shape : shapes)
         {
             shape->update(dt);
         }
 
-        // ---- PHASE 2: Update GPU state & Render ----
-        auto start_render = std::chrono::high_resolution_clock::now();
-        updateGPUPhysicsState(shapes, gpuScene, numObjects);
-        draw_image(gpuScene, image_current);
-        auto end_render = std::chrono::high_resolution_clock::now();
         double time_render = std::chrono::duration<double, std::milli>(end_render - start_render).count();
 
         // ---- PHASE 3: Copy to backup buffer ----
@@ -1742,32 +1741,29 @@ int main(int argc, char **argv)
         // ---- PHASE 5: Queue save for backup buffer (async) ----
         pthread_mutex_lock(&pipeline.mutex);
         pipeline.image = &image_backup;
-        snprintf(pipeline.filename, sizeof(pipeline.filename), "frame.bmp", frame);
+        snprintf(pipeline.filename, sizeof(pipeline.filename), "frame.bmp");
         pipeline.ready = true;
         pthread_cond_signal(&pipeline.cond);
         pthread_mutex_unlock(&pipeline.mutex);
 
         auto frame_end = std::chrono::high_resolution_clock::now();
-        double time_frame = std::chrono::duration<double, std::milli>(frame_end - frame_start).count();
 
-        std::cout << "Update:  " << time_update << " ms\n";
         std::cout << "Render:  " << time_render << " ms\n";
         std::cout << "Copy:    " << time_copy << " ms\n";
         std::cout << "Wait:    " << time_wait << " ms\n";
-        std::cout << "Frame:   " << time_frame << " ms\n";
 
         // usleep(3000000);
     }
     printf("--------------End of Rendering--------------\n");
 
     // Final image output
-    if (ONLY_FINAL_FRAME)
+    /*if (ONLY_FINAL_FRAME)
     {
         if (image_validity == true and save_as_bmp(image, "test_image_gpu.bmp") == false)
         {
             printf("Image saving error, leaving loop\n");
         }
-    }
+    }*/
 
     // Output performance metrics
     printf("\n--------------Run Parameters Recap---------------\n");

@@ -43,7 +43,7 @@
 #if DEBUG_PERF == true
 #   define KEEP_VALUES_HISTORIC false
 #endif
-#define ONLY_FINAL_FRAME true
+#define ONLY_FINAL_FRAME false
 
 // Images resolution for the GPU to render
 #define IMAGE_RESOLUTION_WIDTH 1920

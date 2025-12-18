@@ -1289,7 +1289,7 @@ int main (int argc, char** argv) {
         tab_pos.rot[4].theta_y += 0.1;
         tab_pos.rot[4].theta_z += 0.1;
 
-        //usleep(3000000);
+        usleep(3000000);
     }
     printf("--------------End of Rendering--------------\n");
 
