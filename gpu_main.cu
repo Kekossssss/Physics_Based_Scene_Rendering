@@ -581,6 +581,17 @@ void clean_video_memory(id_array *gpu_id_array, image_array *gpu_image, gpu_obje
     }
 }
 
+void synchronize_gpu_image(bool image_is_valid, gpu_object_pointers *gpu_obj_pointers, cudaStream_t *gpu_stream) {
+    for (int i = 0; i < NB_STREAM; i++) {
+        if (image_is_valid==true and (gpu_obj_pointers[i].state == COPY_TO_GPU or gpu_obj_pointers[i].state == COPY_AND_COMPUTE or gpu_obj_pointers[i].state == ALL_ACTIONS)) {
+            if (cudaStreamSynchronize(gpu_stream[i]) != cudaSuccess) {
+                printf("Cuda Synchronization for stream %d as failed\n", i);
+            }
+        }
+    }
+}
+
+
 //------------------------------------------------------------------------------------------//
 // CPU Functions (Block/Thread allocation management)
 //------------------------------------------------------------------------------------------//
@@ -1254,7 +1265,7 @@ bool draw_image(object_to_gpu &tab_pos, image_array &image, id_array *identifier
         }
         else
         {
-#pragma omp parallel for num_threads(NB_STREAM) schedule(static)
+            //#pragma omp parallel for num_threads(NB_STREAM) schedule(static)
             for (int i = 0; i < 2; i++)
             {
                 // Synchronize with GPU stream to be sure that last operations are finished
@@ -1338,7 +1349,7 @@ bool draw_image(object_to_gpu &tab_pos, image_array &image, id_array *identifier
         }
         else
         {
-#pragma omp parallel for num_threads(NB_STREAM) schedule(static)
+            //#pragma omp parallel for num_threads(NB_STREAM) schedule(static)
             for (int i = 0; i < 3; i++)
             {
                 // Synchronize with GPU stream to be sure that last operations are finished
@@ -1386,7 +1397,7 @@ bool draw_image(object_to_gpu &tab_pos, image_array &image, id_array *identifier
 //------------------------------------------------------------------------------------------//
 void benchmark_performance(int i, std::chrono::_V2::system_clock::time_point before_image_draw, time_benchmarking *time_table, gpu_object_pointers *gpu_obj_pointers, cudaStream_t *gpu_stream)
 {
-#pragma omp parallel for num_threads(NB_STREAM) schedule(static)
+    //#pragma omp parallel for num_threads(NB_STREAM) schedule(static)
     for (int st = 0; st < NB_STREAM; st++)
     {
         if (gpu_obj_pointers[st].state != NONE)
@@ -1723,35 +1734,38 @@ int main(int argc, char **argv)
         double time_render = std::chrono::duration<double, std::milli>(end_render - start_render).count();
 
         // ---- PHASE 3: Copy to backup buffer ----
-        auto start_copy = std::chrono::high_resolution_clock::now();
-        copyImageArray(image_current, image_backup);
-        auto end_copy = std::chrono::high_resolution_clock::now();
-        double time_copy = std::chrono::duration<double, std::milli>(end_copy - start_copy).count();
+        synchronize_gpu_image(image_validity, gpu_obj_pointers, gpu_stream);
+        if (image_validity) {
+            auto start_copy = std::chrono::high_resolution_clock::now();
+            copyImageArray(image_current, image_backup);
+            auto end_copy = std::chrono::high_resolution_clock::now();
+            double time_copy = std::chrono::duration<double, std::milli>(end_copy - start_copy).count();
 
-        // ---- PHASE 4: Wait for previous save to complete ----
-        auto start_wait = std::chrono::high_resolution_clock::now();
-        pthread_mutex_lock(&pipeline.mutex);
-        while (pipeline.ready)
-        {
-            pthread_cond_wait(&pipeline.cond, &pipeline.mutex);
+            // ---- PHASE 4: Wait for previous save to complete ----
+            auto start_wait = std::chrono::high_resolution_clock::now();
+            pthread_mutex_lock(&pipeline.mutex);
+            while (pipeline.ready)
+            {
+                pthread_cond_wait(&pipeline.cond, &pipeline.mutex);
+            }
+            pthread_mutex_unlock(&pipeline.mutex);
+            auto end_wait = std::chrono::high_resolution_clock::now();
+            double time_wait = std::chrono::duration<double, std::milli>(end_wait - start_wait).count();
+
+            // ---- PHASE 5: Queue save for backup buffer (async) ----
+            pthread_mutex_lock(&pipeline.mutex);
+            pipeline.image = &image_backup;
+            snprintf(pipeline.filename, sizeof(pipeline.filename), "frame.bmp");
+            pipeline.ready = true;
+            pthread_cond_signal(&pipeline.cond);
+            pthread_mutex_unlock(&pipeline.mutex);
+
+            auto frame_end = std::chrono::high_resolution_clock::now();
+
+            std::cout << "Render:  " << time_render << " ms\n";
+            std::cout << "Copy:    " << time_copy << " ms\n";
+            std::cout << "Wait:    " << time_wait << " ms\n";
         }
-        pthread_mutex_unlock(&pipeline.mutex);
-        auto end_wait = std::chrono::high_resolution_clock::now();
-        double time_wait = std::chrono::duration<double, std::milli>(end_wait - start_wait).count();
-
-        // ---- PHASE 5: Queue save for backup buffer (async) ----
-        pthread_mutex_lock(&pipeline.mutex);
-        pipeline.image = &image_backup;
-        snprintf(pipeline.filename, sizeof(pipeline.filename), "frame.bmp");
-        pipeline.ready = true;
-        pthread_cond_signal(&pipeline.cond);
-        pthread_mutex_unlock(&pipeline.mutex);
-
-        auto frame_end = std::chrono::high_resolution_clock::now();
-
-        std::cout << "Render:  " << time_render << " ms\n";
-        std::cout << "Copy:    " << time_copy << " ms\n";
-        std::cout << "Wait:    " << time_wait << " ms\n";
 
         // usleep(3000000);
     }
