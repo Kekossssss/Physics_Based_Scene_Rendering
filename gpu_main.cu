@@ -5,6 +5,7 @@
 //------------------------------------------------------------------------------------------//
 #include "cuda.h"
 #include "omp.h"
+#include "cpu_part.hpp"
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -21,7 +22,7 @@
 #include <thread>
 #include <pthread.h>
 
-double gravity = 9.81;
+extern double gravity;
 
 // ============================================================================
 // PTHREAD STRUCTURES
@@ -1682,6 +1683,7 @@ int main(int argc, char **argv)
     shapes.push_back(new RectangularPrism(Point3D(100, 100, 50), 400, 300, 200,
                                           Point3D(5, 5, 0), Point3D(0, 0, 0),
                                           Point3D(0, 0, 0)));
+    shapes.push_back(new Sphere(Point3D(130, 50, 10), 100, Point3D(0, 0, 0)));
 
     // GPU conversion
     int numObjects = convertSceneToGPU(shapes, tab_pos, true);
@@ -1760,6 +1762,13 @@ int main(int argc, char **argv)
         std::chrono::duration<double, std::milli> duration_after_init = after_init - start;
         printf("Execution time after initialisation: %f ms\n", duration_after_init.count());
     }
+
+    long long collisionsDetected = 0;
+    long long collisionsResolved = 0;
+    bool resolveCollisions = true;
+
+    int N = shapes.size();
+
     printf("--------------Start Rendering---------------\n");
     for (int i = 0; i < RENDERED_FRAMES; i++)
     {
@@ -1787,6 +1796,50 @@ int main(int argc, char **argv)
         for (auto shape : shapes)
         {
             shape->update(dt);
+        }
+
+        // Détection et résolution de collisions
+        #pragma omp parallel for schedule(dynamic) reduction(+:collisionsDetected,collisionsResolved)
+        for(int i=0; i<N; i++) {
+            for(int j=i+1; j<N; j++) {
+                bool collision = false;
+                
+                Sphere* s1 = dynamic_cast<Sphere*>(shapes[i]);
+                Sphere* s2 = dynamic_cast<Sphere*>(shapes[j]);
+                RigidBody* r1 = dynamic_cast<RigidBody*>(shapes[i]);
+                RigidBody* r2 = dynamic_cast<RigidBody*>(shapes[j]);
+
+                if(s1 && s2) {
+                    collision = checkSphereCollision(*s1, *s2);
+                    if(collision) {
+                        resolveSphereSphereCollision(s1, s2);
+                        collisionsResolved++;
+                    }
+                }
+                else if(r1 && r2) {
+                    collision = checkOBBCollision(*r1, *r2);
+                    if(collision) {
+                        resolveRigidRigidCollision(r1, r2);
+                        collisionsResolved++;
+                    }
+                }
+                else if(s1 && r2) {
+                    collision = checkSphereRigidCollision(*s1, *r2);
+                    if(collision) {
+                        resolveSphereRigidCollision(s1, r2);
+                        collisionsResolved++;
+                    }
+                }
+                else if(r1 && s2) {
+                    collision = checkSphereRigidCollision(*s2, *r1);
+                    if(collision) {
+                        resolveSphereRigidCollision(s2, r1);
+                        collisionsResolved++;
+                    }
+                }
+
+                if(collision) collisionsDetected++;
+            }
         }
         
         convertSceneToGPU(shapes, tab_pos, true);
@@ -1854,6 +1907,11 @@ int main(int argc, char **argv)
     printf("Number of objects in simulation : %d\n", NB_OBJECT);
     printf("Number of rendered frames : %d\n", RENDERED_FRAMES);
     printf("-------------------------------------------------\n");
+
+    std::cout << "Collisions       : " << collisionsDetected << std::endl;
+    if(resolveCollisions) {
+        std::cout << "Résolutions      : " << collisionsResolved << std::endl;
+    }
 
     auto end = std::chrono::high_resolution_clock::now();
     if (DEBUG_PERF)
