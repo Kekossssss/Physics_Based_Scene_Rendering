@@ -1694,7 +1694,7 @@ int main(int argc, char **argv)
     int numObjects = convertSceneToGPU(shapes, tab_pos, true);
     std::cout << "Converted " << numObjects << " objects\n";
 
-    double dt = 1.0 / 60.0;
+    double dt = 1.0 / 60.0 * 10.0;
 
     // Double buffering: two image arrays
     image_array image_current;
