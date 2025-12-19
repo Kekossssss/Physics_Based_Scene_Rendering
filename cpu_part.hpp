@@ -163,6 +163,6 @@ void resolveSphereRigidCollision(Sphere* s, RigidBody* r);
 
 // Simulation Loop
 void simulationStep(std::vector<Shape*>& shapes, double dt, long long& nbCollisions);
-void simulationStepNoParallel(vector<Shape*>& shapes, double dt, long long& nbCollisions);
+void simulationStepNoParallel(std::vector<Shape*>& shapes, double dt, long long& nbCollisions);
 
 #endif
