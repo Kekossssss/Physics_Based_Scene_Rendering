@@ -189,28 +189,24 @@ struct id_array {
 };
 
 
-// Structure to gather all of the objects at a defined time with all of their characteristics (with only GPU related values)
 struct object_to_gpu {
-    unsigned char type[NB_OBJECT]; // Object type
+    unsigned char type[NB_OBJECT]; 
     position pos[NB_OBJECT];
     rotation rot[NB_OBJECT];
     int nb_dim[NB_OBJECT];
-    float dimension[NB_OBJECT][MAX_DIMENSIONS_OBJECTS]; //Table of the dimensions for each kind of shape, use a function to assign each index to it's corresponding dimension according to the kind of shape
+    float dimension[NB_OBJECT][MAX_DIMENSIONS_OBJECTS]; 
     bool is_single_color[NB_OBJECT];
-    colors col[NB_OBJECT][MAX_FACES_OBJECT]; // Follows the following logic for assigning colors : Top -> Bottom of the shape, Right -> Left of the shape, Front -> Back of the shape
+    colors col[NB_OBJECT][MAX_FACES_OBJECT]; 
 };
 
-// IMPORTANT: CPU dev only need to provide this structure, GPU dev will do the translation towards the previous struct
-// Structure to gather all of the objects at a defined time with all of their characteristics
+
 struct object {
-    unsigned char id[NB_OBJECT][2]; // [0] = Object type, [1] = Object identifier
+    unsigned char id[NB_OBJECT][2];
     position pos[NB_OBJECT];
     rotation rot[NB_OBJECT];
-    float dimension[NB_OBJECT][MAX_DIMENSIONS_OBJECTS]; //Table of the dimensions for each kind of shape, use a function to assign each index to it's corresponding dimension according to the kind of shape
-    // CPU dev can add more object related values here
+    float dimension[NB_OBJECT][MAX_DIMENSIONS_OBJECTS]; 
 };
 
-// Image array outputed by the GPU in order to be visualised
 struct image_array {
     unsigned char* red;
     unsigned char* green;
@@ -218,7 +214,6 @@ struct image_array {
     unsigned char* alpha;  //Opacity of the color
 };
 
-// Small AI generated function to output an image from the image array (does not currently support alpha values)
 bool save_as_bmp(const image_array& img, const char* filename);
 
 #endif
