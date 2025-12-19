@@ -12,7 +12,11 @@ main_cpu:  main_cpu.cpp
 	g++ $(GCCFLAGS) utils.cpp cpu_renderer.cpp main_cpu.cpp -o main_cpu 
 
 main_gpu : gpu_main.cu
+<<<<<<< HEAD
 	nvcc $(NVFLAGS) -o gpu_main gpu_main.cu utils.cpp cpu_part_collisions.cpp
+=======
+	nvcc $(NVFLAGS) -o gpu_main gpu_main.cu utils.cpp cpu_part.cpp
+>>>>>>> ddbdae420e5a6ce59c5b6d5a4e84b456a0beea24
 	
 main_gpu2 : gpu_main.cu
 	nvcc $(NVFLAGS) -o gpu_main gpu_main.cu utils.cpp cpu_part_collisions.cpp

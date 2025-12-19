@@ -14,6 +14,54 @@ struct Point3D {
     double x;
     double y;
     double z;
+
+    Point3D operator+(const Point3D& other) const {
+        Point3D result;
+        result.x = this->x + other.x; // 'this' implicitly refers to the left operand (a)
+        result.y = this->y + other.y;
+        result.z = this->z + other.z;
+        return result;
+    }
+
+    Point3D operator-(const Point3D& other) const {
+        Point3D result;
+        result.x = this->x - other.x; // 'this' implicitly refers to the left operand (a)
+        result.y = this->y - other.y;
+        result.z = this->z - other.z;
+        return result;
+    }
+
+    Point3D operator*(double scalar) const {
+        return {x * scalar, y * scalar, z * scalar};
+    }
+
+    double dot(const Point3D& other) {
+        Point3D result;
+
+        return this->x * other.x + this->y * other.y + this->z * other.z;
+    }
+
+    double length() const {
+        return std::sqrt(x * x + y * y + z * z);
+    }
+
+    Point3D normalize() {
+        double norm = std::sqrt(x * x + y * y + z * z);
+
+        if (norm != 0) {
+            return {x / norm, y / norm, z / norm};
+        } else {
+            return {0, 0, 0};
+        }
+    }
+
+    double distance(const Point3D& point) const {
+        double dx = point.x- this->x;
+        double dy = point.y - this->y;
+        double dz = point.z - this->z;
+
+        return std::sqrt(dx * dx + dy * dy + dz * dz);
+    }
 };
 
 class Shape {
@@ -24,17 +72,25 @@ protected:
     double width;
     Point3D velocity;
 
+    double mass;           // AJOUTEZ
+    double restitution;    // AJOUTEZ
+
 public:
-    Shape(Point3D c, double h, double L, double W, Point3D v)
+    Shape(Point3D c, double h, double L, double W, Point3D v, double m = 500, double e = 0.5)
         : massCenter(c), height(h), length(L), width(W), velocity(v) {}
 
-    virtual double distance(const Point3D& point) const = 0;
+    double distance(const Point3D& point) const {
+        return massCenter.distance(point);
+    };
 
     virtual void printPosition() const {
         cout << "Center: (" << massCenter.x << ", "
              << massCenter.y << ", "
              << massCenter.z << ")\n";
     }
+
+    double getMass() const { return mass; }
+    double getRestitution() const { return restitution; }
 
     void translate(double dx, double dy, double dz) {
         massCenter.x += dx;
@@ -44,13 +100,19 @@ public:
 
     virtual void update(double dt) {
         velocity.y += gravity * dt;
-        massCenter.x += velocity.x * dt;
-        massCenter.y += velocity.y * dt;
-        massCenter.z += velocity.z * dt;
+        massCenter = massCenter + velocity * dt;  // Au lieu de += séparé
+    }
+
+    // AJOUTEZ applyImpulse:
+    void applyImpulse(const Point3D& impulse) {
+        velocity = velocity + impulse * (1.0 / mass);
     }
 
     Point3D getCenter() const { 
         return massCenter; 
+    }
+    Point3D getVelocity() const {
+        return velocity;
     }
     double getLength() const { 
         return length;
@@ -72,13 +134,11 @@ double L1(const Point3D& a, const Point3D& b) {
            std::abs(a.z - b.z);
 }
 
-
 double L2(const Point3D& a, const Point3D& b) {
-    return std::sqrt(
-        std::pow(a.x - b.x, 2) +
-        std::pow(a.y - b.y, 2) +
-        std::pow(a.z - b.z, 2)
-    );
+    double dx = a.x - b.x;
+    double dy = a.y - b.y;
+    double dz = a.z - b.z;
+    return std::sqrt(dx*dx + dy*dy + dz*dz);
 }
 
 //////Sphere
@@ -86,15 +146,16 @@ class Sphere : public Shape {
 private:
     double radius;
 public:
-    Sphere(Point3D c, double diameter, Point3D v)
-        : Shape(c, diameter, diameter, diameter, v), radius(diameter/2) {}
+    Sphere(Point3D c, double diameter, Point3D v, double m = 500, double e = 0.5)
+        : Shape(c, diameter, diameter, diameter, v, m, e), radius(diameter/2) {}
 
     double getRadius() const { 
         return radius; 
     }
 
-    double distance(const Point3D& p) const override {
-        return L2(getCenter(), p);
+    
+    double distance(const Point3D& p) const {
+        return L1(massCenter, p);
     }
     
     void update(double dt) override {
@@ -111,8 +172,8 @@ protected:
     Point3D axes[3]; // local axes
 
 public:
-    RigidBody(Point3D c, double h, double L, double W, Point3D v, Point3D a, Point3D av)
-        : Shape(c, h, L, W, v), angle(a), angularVelocity(av) {
+    RigidBody(Point3D c, double h, double L, double W, Point3D v, Point3D a, Point3D av, double m = 500, double e = 0.5)
+        : Shape(c, h, L, W, v, m, e), angle(a), angularVelocity(av) {
         axes[0] = {1,0,0};
         axes[1] = {0,1,0};
         axes[2] = {0,0,1};
@@ -123,9 +184,12 @@ public:
         cout << "Angles: (" << angle.x << ", " << angle.y << ", " << angle.z << ")\n";
     }
 
-    double distance(const Point3D& p) const override {
-        return L1(getCenter(), p);
+    double distance(const Point3D& p) const {
+        return L1(massCenter, p);
     }
+
+
+    const Point3D& getAxis(int i) const { return axes[i]; }
 
     void rotate(double dax, double day, double daz) {
         angle.x += dax;
@@ -150,21 +214,19 @@ public:
         angle.z += angularVelocity.z * dt;
         updateAxes();
     }
-    
-    const Point3D& getAxis(int i) const { return axes[i]; }
 };
 
 class Cube : public RigidBody {
 public:
-    Cube(Point3D c, double side, Point3D v, Point3D a, Point3D av)
-        : RigidBody(c, side, side, side, v, a, av) {}
+    Cube(Point3D c, double side, Point3D v, Point3D a, Point3D av, double m = 500.0, double e = 0.5)
+        : RigidBody(c, side, side, side, v, a, av, m, e) {}
 
 };
 
 class RectangularPrism : public RigidBody {
 public:
-    RectangularPrism(Point3D c, double h, double L, double W, Point3D v, Point3D a, Point3D av)
-        : RigidBody(c, h, L, W, v, a, av) {}
+    RectangularPrism(Point3D c, double h, double L, double W, Point3D v, Point3D a, Point3D av, double m = 500, double e = 0.5)
+        : RigidBody(c, h, L, W, v, a, av, m, e) {}
 
 };
 
@@ -172,7 +234,8 @@ public:
 ///// Collision
 //collision between spheres
 bool checkSphereCollision(const Sphere& s1, const Sphere& s2) {
-    return s1.distance(s2.getCenter()) <= (s1.getRadius() + s2.getRadius());
+
+    return s1.getCenter().x * s2.getCenter().x + s1.getCenter().y * s2.getCenter().y + s1.getCenter().z * s2.getCenter().z <= (s1.getRadius() + s2.getRadius());
 }
 
 //collision between two Rigid bodies at angle = (0,0,0)  (for the beginning)
@@ -398,7 +461,72 @@ bool checkSphereRigidCollision(const Sphere& s, const RigidBody& b) {
     return s.distance(closest) <= s.getRadius();
 }
 
+// ===== COLLISION RESOLUTION =====
+void resolveSphereSphereCollision(Sphere* s1, Sphere* s2) {
+    Point3D center1 = s1->getCenter();
+    Point3D center2 = s2->getCenter();
+    Point3D delta = center2 - center1;
+    
+    double dist = delta.length();
+    if(dist < 1e-10) return; // Évite division par zéro
+    
+    Point3D normal = delta * (1.0 / dist);
+    Point3D relVel = s2->getVelocity() - s1->getVelocity();
+    
+    double velAlongNormal = relVel.dot(normal);
+    if(velAlongNormal > 0) return;
+    
+    double e = std::min(s1->getRestitution(), s2->getRestitution());
+    double j = -(1 + e) * velAlongNormal;
+    j /= (1.0/s1->getMass() + 1.0/s2->getMass());
+    
+    Point3D impulse = normal * j;
+    s1->applyImpulse(impulse * -1.0);
+    s2->applyImpulse(impulse);
+}
 
+void resolveSphereRigidCollision(Sphere* s, RigidBody* r) {
+    Point3D closest = closestPointOnOBB(*r, s->getCenter());
+    Point3D delta = s->getCenter() - closest;
+    
+    double dist = delta.length();
+    if(dist < 1e-10) return;
+    
+    Point3D normal = delta * (1.0 / dist);
+    Point3D relVel = s->getVelocity() - r->getVelocity();
+    
+    double velAlongNormal = relVel.dot(normal);
+    if(velAlongNormal > 0) return;
+    
+    double e = std::min(s->getRestitution(), r->getRestitution());
+    double j = -(1 + e) * velAlongNormal;
+    j /= (1.0/s->getMass() + 1.0/r->getMass());
+    
+    Point3D impulse = normal * j;
+    s->applyImpulse(impulse);
+    r->applyImpulse(impulse * -1.0);
+}
+
+void resolveRigidRigidCollision(RigidBody* r1, RigidBody* r2) {
+    // Collision simplifiée pour rigid-rigid (utilise les centres)
+    Point3D delta = r2->getCenter() - r1->getCenter();
+    double dist = delta.length();
+    if(dist < 1e-10) return;
+    
+    Point3D normal = delta * (1.0 / dist);
+    Point3D relVel = r2->getVelocity() - r1->getVelocity();
+    
+    double velAlongNormal = relVel.dot(normal);
+    if(velAlongNormal > 0) return;
+    
+    double e = std::min(r1->getRestitution(), r2->getRestitution());
+    double j = -(1 + e) * velAlongNormal;
+    j /= (1.0/r1->getMass() + 1.0/r2->getMass());
+    
+    Point3D impulse = normal * j;
+    r1->applyImpulse(impulse * -1.0);
+    r2->applyImpulse(impulse);
+}
 
 // Test /////////////////////////////
 void logStep(int step, double time, string msg) {
@@ -470,7 +598,7 @@ double randDouble(double min, double max) {
     return min + (double)rand() / RAND_MAX * (max - min);
 }
 
-int main() {
+int no_main() {
     srand(time(0));
     
     // 1. CONFIGURATION

@@ -80,6 +80,7 @@ inline void convertShapeToGPU(const Shape *shape, object_to_gpu &gpuObj, int ind
     // Set dimensions based on detected type
     if (sphere)
     { // Sphere
+<<<<<<< HEAD
         gpuObj.nb_dim[index] = 1;
         // Some sphere implementations provide getDiameter(), others getRadius()
         double diameter = 0.0;
@@ -94,6 +95,16 @@ inline void convertShapeToGPU(const Shape *shape, object_to_gpu &gpuObj, int ind
         gpuObj.dimension[index][0] = static_cast<float>(diameter);
         gpuObj.dimension[index][1] = 0.0f;
         gpuObj.dimension[index][2] = 0.0f;
+=======
+        const Sphere *sphere = dynamic_cast<const Sphere *>(shape);
+        if (sphere)
+        {
+            gpuObj.nb_dim[index] = 1;
+            gpuObj.dimension[index][0] = static_cast<float>(sphere->getDiameter())/2.0;
+            gpuObj.dimension[index][1] = 0.0f;
+            gpuObj.dimension[index][2] = 0.0f;
+        }
+>>>>>>> ddbdae420e5a6ce59c5b6d5a4e84b456a0beea24
     }
     else if (cube && !prism)
     { // Cube

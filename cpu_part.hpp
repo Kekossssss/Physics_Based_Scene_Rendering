@@ -526,5 +526,11 @@ inline void updateAllShapes(std::vector<Shape *> &shapes, double dt)
 }
 
 bool checkRigidNoAngleCollision(const RigidBody &a, const RigidBody &b);
+bool checkSphereRigidCollision(const Sphere& s, const RigidBody& b);
+void resolveSphereSphereCollision(Sphere* s1, Sphere* s2);
+void resolveSphereRigidCollision(Sphere* s, RigidBody* r);
+void resolveRigidRigidCollision(RigidBody* r1, RigidBody* r2);
+bool checkSphereCollision(const Sphere& s1, const Sphere& s2);
+bool checkOBBCollision(const RigidBody& A, const RigidBody& B);
 
 #endif // CPU_OBJECTS_HPP
