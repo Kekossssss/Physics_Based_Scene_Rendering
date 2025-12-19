@@ -76,5 +76,6 @@ singularity pull docker://jrottenberg/ffmpeg
 ```
 The following video demonstrates the capabilities of our implementation:
 
-[![IMAGE ALT TEXT HERE](https://img.youtube.com/vi/D36CBSIemU/1.jpg)](https://www.youtube.com/watch?v=-D36CBSIemU)
+[![IMAGE ALT TEXT HERE][(https://i.ytimg.com/vi/-D36CBSIemU/hqdefault.jpg?sqp=-oaymwE2CNACELwBSFXyq4qpAygIARUAAIhCGAFwAcABBvABAfgB_gmAAtAFigIMCAAQARgRIHIoETAP&rs=AOn4CLCSCvqLHNROWM9I-84iaEzEh3WClw)](https://www.youtube.com/watch?v=-D36CBSIemU)
+
 
