@@ -10,6 +10,8 @@
 #include <iostream>
 #include <cstring>
 
+#define RENDERED_FRAMES 500
+
 //------------------------------------------------------------------------------------------//
 // GPU Rendering Quality Parameters
 //------------------------------------------------------------------------------------------//
@@ -67,7 +69,7 @@
 #define IMAGE_OFFSET_HEIGHT 0.0
 
 // Defines the number of objects that are going to be simulated
-#define NB_OBJECT 5
+#define NB_OBJECT 20
 
 // Defines the maximum number of dimensions that an object can have (radius for a sphere, lenght/height/width for a rectangle, side for a square...)
 #define MAX_DIMENSIONS_OBJECTS 3

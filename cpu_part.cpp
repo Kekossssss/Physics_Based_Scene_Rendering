@@ -149,12 +149,9 @@ void resolveSphereSphereCollision(Sphere* s1, Sphere* s2) {
     Point3D relVel = s2->getVelocity() - s1->getVelocity();
     if(relVel.dot(normal) > 0) return;
 
-    double m1 = s1->getMass();
-    double m2 = s2->getMass();
-    double totalMass = m1 + m2;
-    
-    double e = std::min(s1->getRestitution(), s2->getRestitution());
-    double j = -(1 + e) * relVel.dot(normal) / totalMass;
+    double m1 = 1.0/s1->getMass(), m2 = 1.0/s2->getMass();
+    double j = -(1 + std::min(s1->getRestitution(), s2->getRestitution())) * relVel.dot(normal);
+    j /= (m1 + m2);
     
     if (std::isfinite(j)) {
         s1->applyImpulse(normal * -j);
@@ -162,12 +159,10 @@ void resolveSphereSphereCollision(Sphere* s1, Sphere* s2) {
     }
 
     if(overlap > 0.01) {
-        double ratio1 = m2 / totalMass;
-        double ratio2 = m1 / totalMass;
-        Point3D corr = normal * (overlap * 0.5); 
+        Point3D corr = normal * (overlap * 0.8 / (m1 + m2));
         if (isValid(corr)) {
-            s1->translate(-corr.x * ratio1, -corr.y * ratio1, -corr.z * ratio1);
-            s2->translate( corr.x * ratio2,  corr.y * ratio2,  corr.z * ratio2);
+            s1->translate(-corr.x * m1, -corr.y * m1, -corr.z * m1);
+            s2->translate( corr.x * m2,  corr.y * m2,  corr.z * m2);
         }
     }
 }
@@ -188,12 +183,9 @@ void resolveRigidRigidCollision(RigidBody* r1, RigidBody* r2) {
     Point3D relVel = r2->getVelocity() - r1->getVelocity();
     if(relVel.dot(normal) > 0) return;
     
-    double m1 = r1->getMass();
-    double m2 = r2->getMass();
-    double totalMass = m1 + m2;
-    
-    double e = std::min(r1->getRestitution(), r2->getRestitution());
-    double j = -(1 + e) * relVel.dot(normal) / totalMass;
+    double m1 = 1.0/r1->getMass(), m2 = 1.0/r2->getMass();
+    double j = -(1 + std::min(r1->getRestitution(), r2->getRestitution())) * relVel.dot(normal);
+    j /= (m1 + m2);
     
     if (std::isfinite(j)) {
         r1->applyImpulse(normal * -j);
@@ -201,12 +193,10 @@ void resolveRigidRigidCollision(RigidBody* r1, RigidBody* r2) {
     }
 
     if(overlap > 0.01) {
-        double ratio1 = m2 / totalMass;
-        double ratio2 = m1 / totalMass;
-        Point3D corr = normal * (overlap * 0.5);
+        Point3D corr = normal * (overlap * 0.8 / (m1 + m2));
         if (isValid(corr)) {
-            r1->translate(-corr.x * ratio1, -corr.y * ratio1, -corr.z * ratio1);
-            r2->translate( corr.x * ratio2,  corr.y * ratio2,  corr.z * ratio2);
+            r1->translate(-corr.x * m1, -corr.y * m1, -corr.z * m1);
+            r2->translate( corr.x * m2,  corr.y * m2,  corr.z * m2);
         }
     }
 }
@@ -234,12 +224,9 @@ void resolveSphereRigidCollision(Sphere* s, RigidBody* r) {
     Point3D relVel = s->getVelocity() - r->getVelocity();
     if(relVel.dot(normal) > 0) return;
     
-    double mS = s->getMass();
-    double mR = r->getMass();
-    double totalMass = mS + mR;
-    
-    double e = std::min(s->getRestitution(), r->getRestitution());
-    double j = -(1 + e) * relVel.dot(normal) / totalMass;
+    double mS = 1.0/s->getMass(), mR = 1.0/r->getMass();
+    double j = -(1 + std::min(s->getRestitution(), r->getRestitution())) * relVel.dot(normal);
+    j /= (mS + mR);
     
     if (std::isfinite(j)) {
         s->applyImpulse(normal * j);
@@ -247,12 +234,10 @@ void resolveSphereRigidCollision(Sphere* s, RigidBody* r) {
     }
 
     if(overlap > 0.01) {
-        double ratioS = mR / totalMass;
-        double ratioR = mS / totalMass;
-        Point3D corr = normal * (overlap * 0.5);
+        Point3D corr = normal * (overlap * 0.8 / (mS + mR));
         if (isValid(corr)) {
-            s->translate( corr.x * ratioS,  corr.y * ratioS,  corr.z * ratioS);
-            r->translate(-corr.x * ratioR, -corr.y * ratioR, -corr.z * ratioR);
+            s->translate( corr.x * mS,  corr.y * mS,  corr.z * mS);
+            r->translate(-corr.x * mR, -corr.y * mR, -corr.z * mR);
         }
     }
 }
@@ -262,7 +247,30 @@ void resolveSphereRigidCollision(Sphere* s, RigidBody* r) {
 
 void simulationStep(vector<Shape*>& shapes, double dt, long long& nbCollisions) {
     int N = shapes.size();
-    #pragma omp parallel for
+    #pragma omp parallel for schedule(static)
+    for (int i = 0; i < N; ++i) shapes[i]->update(dt);
+
+    // Collisions
+    #pragma omp parallel for reduction(+:nbCollisions) schedule(dynamic)
+    for (int i = 0; i < N; ++i) {
+        for (int j = i + 1; j < N; ++j) {
+            Sphere* s1 = dynamic_cast<Sphere*>(shapes[i]);
+            Sphere* s2 = dynamic_cast<Sphere*>(shapes[j]);
+            RigidBody* r1 = dynamic_cast<RigidBody*>(shapes[i]);
+            RigidBody* r2 = dynamic_cast<RigidBody*>(shapes[j]);
+
+            bool hit = false;
+            if (s1 && s2) { if (checkSphereCollision(*s1, *s2)) { resolveSphereSphereCollision(s1, s2); hit=true; } }
+            else if (r1 && r2) { if (checkOBBCollision(*r1, *r2)) { resolveRigidRigidCollision(r1, r2); hit=true; } }
+            else if (s1 && r2) { if (checkSphereRigidCollision(*s1, *r2)) { resolveSphereRigidCollision(s1, r2); hit=true; } }
+            else if (r1 && s2) { if (checkSphereRigidCollision(*s2, *r1)) { resolveSphereRigidCollision(s2, r1); hit=true; } }
+            if (hit) nbCollisions++;
+        }
+    }
+}
+
+void simulationStepNoParallel(vector<Shape*>& shapes, double dt, long long& nbCollisions) {
+    int N = shapes.size();
     for (int i = 0; i < N; ++i) shapes[i]->update(dt);
 
     // Collisions

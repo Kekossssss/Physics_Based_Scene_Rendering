@@ -1,8 +1,6 @@
 #ifndef GPU_PART_HPP
 #define GPU_PART_HPP
 
-#define RENDERED_FRAMES 100
-
 #include "utils.hpp"
 #include "cuda.h"
 #include <vector>

@@ -24,280 +24,9 @@
 #include <thread>
 #include <pthread.h>
 
+#include "video_writer.hpp"
+
 extern double gravity;
-
-// ============================================================================
-// PTHREAD STRUCTURES
-// ============================================================================
-
-struct ThreadData
-{
-    std::vector<Shape *> *shapes;
-    int start_idx;
-    int end_idx;
-    double dt;
-};
-
-struct MP4FrameData
-{
-    image_array *image;
-    unsigned char *rgb_buffer;
-    bool ready;
-    bool done;
-    pthread_mutex_t mutex;
-    pthread_cond_t cond;
-};
-
-// ============================================================================
-// MP4 VIDEO ENCODER CLASS
-// ============================================================================
-
-class MP4VideoEncoder
-{
-private:
-    FILE *ffmpeg_pipe;
-    int width;
-    int height;
-    int fps;
-    bool is_open;
-
-public:
-    MP4VideoEncoder(const char *filename, int w, int h, int framerate = 60)
-        : width(w), height(h), fps(framerate), is_open(false)
-    {
-        // Build FFmpeg command
-        char command[512];
-        snprintf(command, sizeof(command),
-                "singularity exec ffmpeg_latest.sif "
-         "ffmpeg -y -f rawvideo -pixel_format rgb24 -video_size %dx%d "
-         "-framerate %d -i - -c:v libx264 -preset ultrafast -crf 18 "
-         "-pix_fmt yuv420p -movflags +faststart %s 2>/dev/null",
-                 width, height, fps, filename); 
-
-        std::cout << "Opening FFmpeg pipe...\n";
-        ffmpeg_pipe = popen(command, "w");
-
-        if (ffmpeg_pipe)
-        {
-            is_open = true;
-            std::cout << "FFmpeg encoder started: " << filename << "\n";
-        }
-        else
-        {
-            std::cerr << "ERROR: Failed to open FFmpeg pipe!\n";
-            std::cerr << "Make sure FFmpeg is installed: sudo apt install ffmpeg\n";
-        }
-    }
-
-    bool writeFrame(const image_array &image)
-    {
-        if (!is_open)
-            return false;
-
-        // Convert RGBA to RGB24 (FFmpeg format)
-        unsigned char *rgb_buffer = new unsigned char[width * height * 3];
-
-        for (int i = 0; i < width * height; i++)
-        {
-            rgb_buffer[i * 3 + 0] = image.red[i];
-            rgb_buffer[i * 3 + 1] = image.green[i];
-            rgb_buffer[i * 3 + 2] = image.blue[i];
-        }
-
-        // Write frame to FFmpeg
-        size_t written = fwrite(rgb_buffer, 1, width * height * 3, ffmpeg_pipe);
-        delete[] rgb_buffer;
-
-        return (written == (size_t)(width * height * 3));
-    }
-
-    bool writeFrameRGB(const unsigned char *rgb_buffer)
-    {
-        if (!is_open)
-            return false;
-
-        size_t written = fwrite(rgb_buffer, 1, width * height * 3, ffmpeg_pipe);
-        return (written == (size_t)(width * height * 3));
-    }
-
-// ============================================================================
-// PTHREAD WORKER FUNCTIONS
-// ============================================================================
-
-    ~MP4VideoEncoder()
-    {
-        if (is_open)
-        {
-            std::cout << "Closing FFmpeg encoder...\n";
-            pclose(ffmpeg_pipe);
-        }
-    }
-};
-
-// ============================================================================
-// PTHREAD WORKER FUNCTIONS
-// ============================================================================
-
-void *updateShapesThread(void *arg)
-{
-    ThreadData *data = (ThreadData *)arg;
-    for (int i = data->start_idx; i < data->end_idx; i++)
-    {
-        (*data->shapes)[i]->update(data->dt);
-    }
-    return nullptr;
-}
-
-// ============================================================================
-// PARALLEL UPDATE
-// ============================================================================
-
-void updateShapesParallel(std::vector<Shape *> &shapes, double dt, int num_threads)
-{
-    int num_shapes = shapes.size();
-    pthread_t *threads = new pthread_t[num_threads];
-    ThreadData *thread_data = new ThreadData[num_threads];
-
-    int shapes_per_thread = num_shapes / num_threads;
-    int remainder = num_shapes % num_threads;
-    int current_start = 0;
-
-    for (int i = 0; i < num_threads; i++)
-    {
-        thread_data[i].shapes = &shapes;
-        thread_data[i].start_idx = current_start;
-        thread_data[i].end_idx = current_start + shapes_per_thread + (i < remainder ? 1 : 0);
-        thread_data[i].dt = dt;
-
-        pthread_create(&threads[i], nullptr, updateShapesThread, &thread_data[i]);
-        current_start = thread_data[i].end_idx;
-    }
-
-    for (int i = 0; i < num_threads; i++)
-    {
-        pthread_join(threads[i], nullptr);
-    }
-
-    delete[] threads;
-    delete[] thread_data;
-}
-
-// ============================================================================
-// PARALLEL RGB CONVERSION
-// ============================================================================
-
-struct RGBConversionData
-{
-    const image_array *image;
-    unsigned char *rgb_buffer;
-    int start_idx;
-    int end_idx;
-};
-
-void *convertToRGBThread(void *arg)
-{
-    RGBConversionData *data = (RGBConversionData *)arg;
-
-    for (int i = data->start_idx; i < data->end_idx; i++)
-    {
-        data->rgb_buffer[i * 3 + 0] = data->image->red[i];
-        data->rgb_buffer[i * 3 + 1] = data->image->green[i];
-        data->rgb_buffer[i * 3 + 2] = data->image->blue[i];
-    }
-
-    return nullptr;
-}
-
-void convertToRGBParallel(const image_array &image, unsigned char *rgb_buffer, int num_threads = 4)
-{
-    int total_pixels = IMAGE_RESOLUTION_WIDTH * IMAGE_RESOLUTION_HEIGHT;
-    pthread_t *threads = new pthread_t[num_threads];
-    RGBConversionData *thread_data = new RGBConversionData[num_threads];
-
-    int pixels_per_thread = total_pixels / num_threads;
-    int remainder = total_pixels % num_threads;
-    int current_start = 0;
-
-    for (int i = 0; i < num_threads; i++)
-    {
-        thread_data[i].image = &image;
-        thread_data[i].rgb_buffer = rgb_buffer;
-        thread_data[i].start_idx = current_start;
-        thread_data[i].end_idx = current_start + pixels_per_thread + (i < remainder ? 1 : 0);
-
-        pthread_create(&threads[i], nullptr, convertToRGBThread, &thread_data[i]);
-        current_start = thread_data[i].end_idx;
-    }
-
-    for (int i = 0; i < num_threads; i++)
-    {
-        pthread_join(threads[i], nullptr);
-    }
-
-    delete[] threads;
-    delete[] thread_data;
-}
-
-// ============================================================================
-// ASYNC VIDEO ENCODING THREAD
-// ============================================================================
-
-struct VideoEncoderThreadData
-{
-    MP4VideoEncoder *encoder;
-    MP4FrameData *frame_data;
-};
-
-void *asyncVideoEncoderThread(void *arg)
-{
-    VideoEncoderThreadData *data = (VideoEncoderThreadData *)arg;
-    MP4VideoEncoder *encoder = data->encoder;
-    MP4FrameData *frame_data = data->frame_data;
-
-    while (true)
-    {
-        pthread_mutex_lock(&frame_data->mutex);
-
-        // Wait for frame to be ready
-        while (!frame_data->ready && !frame_data->done)
-        {
-            pthread_cond_wait(&frame_data->cond, &frame_data->mutex);
-        }
-
-        if (frame_data->done)
-        {
-            pthread_mutex_unlock(&frame_data->mutex);
-            break;
-        }
-
-        // Take ownership of the buffer
-        unsigned char *rgb_to_encode = frame_data->rgb_buffer;
-        frame_data->ready = false;
-
-        pthread_mutex_unlock(&frame_data->mutex);
-
-        // Encode frame (unlocked - allows next frame to prepare)
-        encoder->writeFrameRGB(rgb_to_encode);
-
-        // Signal completion
-        pthread_cond_signal(&frame_data->cond);
-    }
-
-    return nullptr;
-}
-
-// ============================================================================
-// HELPER: Copy image data
-// ============================================================================
-
-void copyImageArray(const image_array &src, image_array &dst)
-{
-    int size = IMAGE_RESOLUTION_WIDTH * IMAGE_RESOLUTION_HEIGHT;
-    memcpy(dst.red, src.red, size);
-    memcpy(dst.green, src.green, size);
-    memcpy(dst.blue, src.blue, size);
-    memcpy(dst.alpha, src.alpha, size);
-}
 
 //------------------------------------------------------------------------------------------//
 // Main
@@ -305,9 +34,8 @@ void copyImageArray(const image_array &src, image_array &dst)
 int main(int argc, char **argv)
 {
     printf("Program Starting\n");
-    const char *output_file = (argc >= 4) ? argv[3] : "output.mp4";
 
-    int num_threads = 5;
+    const char *output_file = "output.mp4";
 
     // Performance debug values
     auto start = std::chrono::high_resolution_clock::now();
@@ -322,52 +50,48 @@ int main(int argc, char **argv)
     bench_values.mean_time_compute = 0.0;
     bench_values.mean_time_copy_from = 0.0;
 
-    // Test objects positions
-    object_to_gpu tab_pos;
-
-    // Create scene
-    /*std::vector<Shape *> shapes;
-    shapes.push_back(new Sphere(Point3D(50, 50, 10), 100, Point3D(0, 0, 0), 500, 0.8, 9.81));
-    shapes.push_back(new Cube(Point3D(2000, 200, 20), 200, Point3D(-100, 0, 0),
-                              Point3D(0, 0, 0), Point3D(0.1, 0.1, 0.1), 10, 0.8, 9.81));
-    shapes.push_back(new RectangularPrism(Point3D(100, 200, 50), 400, 300, 200,
-                                          Point3D(100, 5, 0), Point3D(0, 0, 0),
-                                          Point3D(0, 0, 0), 10, 0.8, 9.81));
-    shapes.push_back(new Sphere(Point3D(130, 50, 10), 100, Point3D(0, 0, 0), 10, 0.8, 9.81));*/
-
+    //----------------------------------------------------------------------
+    //      Exemple of objects
+    //----------------------------------------------------------------------
     std::vector<Shape *> shapes;
 
-    shapes.push_back(new Cube(Point3D(512, 2050, 0), 2100, Point3D(0, 0, 0), Point3D(0, 0, 0), Point3D(0, 0, 0), 1e20, 0.5, 0.0));
-    shapes.push_back(new Cube(Point3D(512, -1050, 0), 2100, Point3D(0, 0, 0), Point3D(0, 0, 0), Point3D(0, 0, 0), 1e20, 0.5, 0.0));
-    shapes.push_back(new Cube(Point3D(-1050, 500, 0), 2100, Point3D(0, 0, 0), Point3D(0, 0, 0), Point3D(0, 0, 0), 1e20, 0.5, 0.0));
-    shapes.push_back(new Cube(Point3D(2074, 500, 0), 2100, Point3D(0, 0, 0), Point3D(0, 0, 0), Point3D(0, 0, 0), 1e20, 0.5, 0.0));
+    int k = 2.5;
+    int c = 1000;
 
-    shapes.push_back(new Sphere(Point3D(200, 200, 0), 90, Point3D(200, 100, 0), 100, 0.95, 9.81));
-    shapes.push_back(new Cube(Point3D(400, 200, 0), 90, Point3D(-100, 200, 0), Point3D(0.2, 0.2, 0), Point3D(1, 1, 1), 100, 0.95, 9.81));
-    shapes.push_back(new Sphere(Point3D(600, 200, 0), 90, Point3D(50, 50, 0), 100, 0.95, 9.81));
-    shapes.push_back(new Cube(Point3D(800, 200, 0), 90, Point3D(-200, 100, 0), Point3D(0, 0, 0), Point3D(2, 0, 1), 100, 0.95, 9.81));
+    shapes.push_back(new Sphere(Point3D(200 * k + c, 200 * k, 0), 90 * k, Point3D(200, 100, 0), 100, 0.95, 9.81));
+    shapes.push_back(new Cube(Point3D(400 * k + c, 200 * k, 0), 90 * k, Point3D(-100, 200, 0), Point3D(0.2, 0.2, 0), Point3D(1, 1, 1), 100, 0.95, 9.81));
+    shapes.push_back(new Sphere(Point3D(600 * k + c, 200 * k, 0), 90 * k, Point3D(50, 50, 0), 100, 0.95, 9.81));
+    shapes.push_back(new Cube(Point3D(800 * k + c, 200 * k, 0), 90 * k, Point3D(-200, 100, 0), Point3D(0, 0, 0), Point3D(2, 0, 1), 100, 0.95, 9.81));
 
-    shapes.push_back(new Cube(Point3D(250, 400, 0), 90, Point3D(150, -50, 0), Point3D(0.5, 0, 0), Point3D(0, 2, 0), 100, 0.95, 9.81));
-    shapes.push_back(new Sphere(Point3D(450, 400, 0), 90, Point3D(-50, -150, 0), 100, 0.95, 9.81));
-    shapes.push_back(new Cube(Point3D(650, 400, 0), 90, Point3D(100, 100, 0), Point3D(0, 0, 0.5), Point3D(1, 1, 0), 100, 0.95, 9.81));
-    shapes.push_back(new Sphere(Point3D(850, 400, 0), 90, Point3D(-300, 0, 0), 100, 0.95, 9.81));
+    shapes.push_back(new Cube(Point3D(250 * k + c, 400 * k, 0), 90 * k, Point3D(150, -50, 0), Point3D(0.5, 0, 0), Point3D(0, 2, 0), 100, 0.95, 9.81));
+    shapes.push_back(new Sphere(Point3D(450 * k + c, 400 * k, 0), 90 * k, Point3D(-50, -150, 0), 100, 0.95, 9.81));
+    shapes.push_back(new Cube(Point3D(650 * k + c, 400 * k, 0), 90 * k, Point3D(100, 100, 0), Point3D(0, 0, 0.5), Point3D(1, 1, 0), 100, 0.95, 9.81));
+    shapes.push_back(new Sphere(Point3D(850 * k + c, 400 * k, 0), 90 * k, Point3D(-300, 0, 0), 100, 0.95, 9.81));
 
-    shapes.push_back(new Sphere(Point3D(200, 600, 0), 90, Point3D(0, -400, 0), 100, 0.95, 9.81));
-    shapes.push_back(new Cube(Point3D(400, 600, 0), 90, Point3D(50, -200, 0), Point3D(0, 0, 0), Point3D(3, 0, 0), 100, 0.95, 9.81));
-    shapes.push_back(new Sphere(Point3D(600, 600, 0), 90, Point3D(-50, -200, 0), 100, 0.95, 9.81));
-    shapes.push_back(new Cube(Point3D(800, 600, 0), 90, Point3D(200, -300, 0), Point3D(0.1, 0.1, 0.1), Point3D(0, 3, 0), 100, 0.95, 9.81));
+    shapes.push_back(new Sphere(Point3D(200 * k + c, 600 * k, 0), 90 * k, Point3D(0, -400, 0), 100, 0.95, 9.81));
+    shapes.push_back(new Cube(Point3D(400 * k + c, 600 * k, 0), 90 * k, Point3D(50, -200, 0), Point3D(0, 0, 0), Point3D(3, 0, 0), 100, 0.95, 9.81));
+    shapes.push_back(new Sphere(Point3D(600 * k + c, 600 * k, 0), 90 * k, Point3D(-50, -200, 0), 100, 0.95, 9.81));
+    shapes.push_back(new Cube(Point3D(800 * k + c, 600 * k, 0), 90 * k, Point3D(200, -300, 0), Point3D(0.1, 0.1, 0.1), Point3D(0, 3, 0), 100, 0.95, 9.81));
 
     
+    // Positions of objects on the screen
+    object_to_gpu tab_pos;
+
     // GPU conversion
     int numObjects = convertSceneToGPU(shapes, tab_pos, true);
     std::cout << "Converted " << numObjects << " objects\n";
 
-    double dt = 1.0 / 60.0 * 10.0;
+    double dt = 1.0 / 60.0;
 
     // Double buffering: two image arrays
     image_array image_current;
     int img_size = IMAGE_RESOLUTION_WIDTH * IMAGE_RESOLUTION_HEIGHT;
 
+    //----------------------------------------------------------------------
+    //  Saving into MP4 File
+    //----------------------------------------------------------------------
+
+    //Current image
     image_current.red = new unsigned char[RESOLUTION];
     image_current.green = new unsigned char[RESOLUTION];
     image_current.blue = new unsigned char[RESOLUTION];
@@ -383,7 +107,11 @@ int main(int argc, char **argv)
     unsigned char *rgb_buffer_2 = new unsigned char[img_size * 3];
 
     // Create video encoder
-    MP4VideoEncoder encoder(output_file, IMAGE_RESOLUTION_WIDTH, IMAGE_RESOLUTION_HEIGHT, 60);
+    MP4VideoEncoder encoder(output_file, IMAGE_RESOLUTION_WIDTH, IMAGE_RESOLUTION_HEIGHT, DEBUG_PERF, 60);
+
+    //----------------------------------------------------------------------
+    //      Defining threads which will write MP4 File
+    //----------------------------------------------------------------------
 
     // Setup async encoding pipeline
     MP4FrameData frame_data;
@@ -403,6 +131,10 @@ int main(int argc, char **argv)
     // Track which RGB buffer to use (ping-pong)
     unsigned char *current_rgb = rgb_buffer_1;
     unsigned char *backup_rgb = rgb_buffer_2;
+
+    //----------------------------------------------------------------------
+    //      GPU global memory definition
+    //----------------------------------------------------------------------
 
     // Video Memory initialisation
     bool image_validity;
@@ -435,27 +167,46 @@ int main(int argc, char **argv)
         printf("Execution time after initialisation: %f ms\n", duration_after_init.count());
     }
 
-    long long collisionsDetected = 0;
-    long long collisionsResolved = 0;
-    bool resolveCollisions = true;
+    double waiting_duration = 0;
+    double physics_update = 0;
 
-    int N = shapes.size();
+    long long totalCollisions = 0;
 
     printf("--------------Start Rendering---------------\n");
     for (int i = 0; i < RENDERED_FRAMES; i++)
     {
+        //Progression
+        if (i % (RENDERED_FRAMES / 4) == 0) {
+            std::cout << i / (RENDERED_FRAMES / 4) * 25 << " % of frames completed\n";
+        }
+
+        //----------------------------------------------------------------------
+        //      Update physics
+        //----------------------------------------------------------------------
+        auto start_update = std::chrono::high_resolution_clock::now();
+        
+        simulationStep(shapes, dt, totalCollisions);
+        
+        auto end_update = std::chrono::high_resolution_clock::now();
+        double time_update = std::chrono::duration<double, std::milli>(end_update - start_update).count();
+
+        physics_update += time_update;
+        
+        
+        //----------------------------------------------------------------------
+        //      Rendering
+        //----------------------------------------------------------------------
+        convertSceneToGPU(shapes, tab_pos, true);
+
         // Main function to use in order to draw an image from the set of objects
         if (DEBUG_PERF)
         {
             before_image_draw = std::chrono::high_resolution_clock::now();
         }
         
-        
         //Update GPU state & Render
-        auto start_render = std::chrono::high_resolution_clock::now();
         updateGPUPhysicsState(shapes, tab_pos, numObjects);
         image_validity = draw_image(tab_pos, image_current, gpu_id_array, gpu_image, gpu_obj_pointers, gpu_stream, numBlocks, threadsPerBlock);
-        auto end_render = std::chrono::high_resolution_clock::now();
         if (DEBUG_PERF)
         {
             benchmark_performance(i, before_image_draw, time_table, gpu_obj_pointers, gpu_stream);
@@ -463,83 +214,16 @@ int main(int argc, char **argv)
             print_intermediate_bench_values(i, time_table);
             compute_bench_values(i, bench_values, time_table);
         }
+
         
-        if (i % 5 == 0) {
-            std::cout << "1- S-S: " << shapes[0]->getCenter().y << " | ";
-            std::cout << "C-C: " << shapes[2]->getCenter().y << " | ";
-        }
-
-        int N = (int)shapes.size();
-        for (int k = 0;k < N;i++)
-        {
-            shapes[k]->update(dt);
-        }
-
-        if (i % 5 == 0) {
-            std::cout << "2 - S-S: " << shapes[0]->getCenter().y << " | ";
-            std::cout << "C-C: " << shapes[2]->getCenter().y << " | ";
-        }
-
-        #pragma omp parallel for schedule(dynamic) reduction(+:collisionsDetected,collisionsResolved)
-        for(int k=0; k<N; k++) {
-            for(int j=k+1; j<N; j++) {
-                bool collision = false;
-                
-                Sphere* s1 = dynamic_cast<Sphere*>(shapes[k]);
-                Sphere* s2 = dynamic_cast<Sphere*>(shapes[j]);
-                RigidBody* r1 = dynamic_cast<RigidBody*>(shapes[k]);
-                RigidBody* r2 = dynamic_cast<RigidBody*>(shapes[j]);
-
-                if(s1 && s2) {
-                    collision = checkSphereCollision(*s1, *s2);
-                    if(collision) {
-                        resolveSphereSphereCollision(s1, s2);
-                        collisionsResolved++;
-                    }
-                }
-                else if(r1 && r2) {
-                    collision = checkOBBCollision(*r1, *r2);
-                    if(collision) {
-                        resolveRigidRigidCollision(r1, r2);
-                        collisionsResolved++;
-                    }
-                }
-                else if(s1 && r2) {
-                    collision = checkSphereRigidCollision(*s1, *r2);
-                    if(collision) {
-                        resolveSphereRigidCollision(s1, r2);
-                        collisionsResolved++;
-                    }
-                }
-                else if(r1 && s2) {
-                    collision = checkSphereRigidCollision(*s2, *r1);
-                    if(collision) {
-                        resolveSphereRigidCollision(s2, r1);
-                        collisionsResolved++;
-                    }
-                }
-
-                if(collision) collisionsDetected++;
-            }
-        }
-
-        if (i % 5 == 0) {
-            std::cout << "S-S: " << shapes[0]->getCenter().y << " | ";
-            std::cout << "C-C: " << shapes[2]->getCenter().y << " | ";
-        }
-        
-        convertSceneToGPU(shapes, tab_pos, true);
-
-        double time_render = std::chrono::duration<double, std::milli>(end_render - start_render).count();
-
+        //----------------------------------------------------------------------
+        //      Saving in MP4 File asynchronously
+        //----------------------------------------------------------------------
         //Copy to backup buffer
         synchronize_gpu_image(image_validity, gpu_obj_pointers, gpu_stream);
         if (image_validity) {
-                // Convert to RGB
-            auto start_convert = std::chrono::high_resolution_clock::now();
-            convertToRGBParallel(image_current, current_rgb, num_threads);
-            auto end_convert = std::chrono::high_resolution_clock::now();
-            double time_convert = std::chrono::duration<double, std::milli>(end_convert - start_convert).count();
+            // Convert to RGB
+            convertToRGBParallel(image_current, current_rgb);
 
             // Wait for previous encode to complete
             auto start_wait = std::chrono::high_resolution_clock::now();
@@ -552,6 +236,8 @@ int main(int argc, char **argv)
             auto end_wait = std::chrono::high_resolution_clock::now();
             double time_wait = std::chrono::duration<double, std::milli>(end_wait - start_wait).count();
 
+            waiting_duration += time_wait;
+
             // Queue encode (async)
             pthread_mutex_lock(&frame_data.mutex);
             frame_data.rgb_buffer = current_rgb;
@@ -561,19 +247,7 @@ int main(int argc, char **argv)
 
             // Swap buffers for next frame
             std::swap(current_rgb, backup_rgb);
-
-            if (i % 30 == 0 and DEBUG_PERF)
-            {
-                //std::cout << "Update:   " << time_update << " ms\n";
-                std::cout << "Render:   " << time_render << " ms\n";
-                std::cout << "Convert:  " << time_convert << " ms\n";
-                std::cout << "Wait:     " << time_wait << " ms\n";
-                //std::cout << "Frame:    " << time_frame << " ms\n";
-                //std::cout << "FPS:      " << 1000.0 / time_frame << "\n";
-            }
         }
-
-        // usleep(3000000);
     }
     printf("--------------End of Rendering--------------\n");
 
@@ -584,11 +258,6 @@ int main(int argc, char **argv)
     printf("Number of objects in simulation : %d\n", NB_OBJECT);
     printf("Number of rendered frames : %d\n", RENDERED_FRAMES);
     printf("-------------------------------------------------\n");
-
-    std::cout << "Collisions       : " << collisionsDetected << std::endl;
-    if(resolveCollisions) {
-        std::cout << "Résolutions      : " << collisionsResolved << std::endl;
-    }
 
     auto end = std::chrono::high_resolution_clock::now();
     if (DEBUG_PERF)
@@ -613,6 +282,15 @@ int main(int argc, char **argv)
             printf("Mean time spent copying from the GPU : %f ms\n", bench_values.mean_time_copy_from / ((float)RENDERED_FRAMES - (NB_STREAM - 1)));
         }
         printf("-------------------------------------------------\n");
+
+        
+        std::cout << "\n=== ENCODING COMPLETE ===\n";
+        std::cout << "Total time:     " << duration_end.count() << " ms\n";
+        std::cout << "Average frame:  " << duration_end.count() / RENDERED_FRAMES << " ms\n";
+        std::cout << "Average FPS:    " << (RENDERED_FRAMES * 1000.0) / duration_end.count() << "\n";
+        std::cout << "Average Physics Calculation Time:    " << physics_update / duration_end.count() << " ms\n";
+        std::cout << "Average Waiting Time:    " << waiting_duration / duration_end.count() << " ms\n";
+        std::cout << "Output file:    " << output_file << "\n";
     }
 
     // Wait for final encode
@@ -631,13 +309,6 @@ int main(int argc, char **argv)
     pthread_join(encoder_thread, nullptr);
 
     auto end_total = std::chrono::high_resolution_clock::now();
-    //double duration_total = std::chrono::duration<double, std::milli>(end_total - start_total).count();
-
-    std::cout << "\n=== ENCODING COMPLETE ===\n";
-    //std::cout << "Total time:     " << duration_total << " ms\n";
-    //std::cout << "Average frame:  " << duration_total / num_frames << " ms\n";
-    //std::cout << "Average FPS:    " << (num_frames * 1000.0) / duration_total << "\n";
-    std::cout << "Output file:    " << output_file << "\n";
 
     clean_video_memory(gpu_id_array, gpu_image, gpu_obj_pointers, gpu_stream);
 }
