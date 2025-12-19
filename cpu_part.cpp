@@ -4,678 +4,389 @@
 #include <iomanip>
 #include <cstdlib>
 #include <ctime>
-#include <chrono> 
-#include <omp.h>
+#include <limits>
+#include <algorithm>
+
+#include <omp.h> 
+
 using namespace std;
 
-double gravity = 9.81; 
+double GRAVITY = 9.81; 
 
 struct Point3D {
-    double x;
-    double y;
-    double z;
+    double x, y, z;
 
-    Point3D operator+(const Point3D& other) const {
-        Point3D result;
-        result.x = this->x + other.x; // 'this' implicitly refers to the left operand (a)
-        result.y = this->y + other.y;
-        result.z = this->z + other.z;
-        return result;
-    }
+    Point3D() : x(0), y(0), z(0) {} 
+    Point3D(double x0, double y0, double z0) : x(x0), y(y0), z(z0) {}
 
-    Point3D operator-(const Point3D& other) const {
-        Point3D result;
-        result.x = this->x - other.x; // 'this' implicitly refers to the left operand (a)
-        result.y = this->y - other.y;
-        result.z = this->z - other.z;
-        return result;
-    }
+    Point3D operator+(const Point3D& other) const { return {x + other.x, y + other.y, z + other.z}; }
+    Point3D operator-(const Point3D& other) const { return {x - other.x, y - other.y, z - other.z}; }
+    Point3D operator*(double scalar) const { return {x * scalar, y * scalar, z * scalar}; }
 
-    Point3D operator*(double scalar) const {
-        return {x * scalar, y * scalar, z * scalar};
-    }
+    double dot(const Point3D& other) const { return x * other.x + y * other.y + z * other.z; }
 
-    double dot(const Point3D& other) {
-        Point3D result;
-
-        return this->x * other.x + this->y * other.y + this->z * other.z;
-    }
-
-    double length() const {
-        return std::sqrt(x * x + y * y + z * z);
-    }
+    double length() const { return std::sqrt(x*x + y*y + z*z); }
 
     Point3D normalize() {
-        double norm = std::sqrt(x * x + y * y + z * z);
-
-        if (norm != 0) {
-            return {x / norm, y / norm, z / norm};
-        } else {
-            return {0, 0, 0};
-        }
+        double l = length();
+        if (l > 1e-8) return {x / l, y / l, z / l};
+        return {0, 0, 0};
     }
 
     double distance(const Point3D& point) const {
-        double dx = point.x- this->x;
-        double dy = point.y - this->y;
-        double dz = point.z - this->z;
-
-        return std::sqrt(dx * dx + dy * dy + dz * dz);
+        double dx = point.x - x;
+        double dy = point.y - y;
+        double dz = point.z - z;
+        return std::sqrt(dx*dx + dy*dy + dz*dz);
     }
 };
+
+ostream& operator<<(ostream& os, const Point3D& p) {
+    os << "(" << p.x << ", " << p.y << ", " << p.z << ")";
+    return os;
+}
+
+bool isValid(const Point3D& p) {
+    return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z);
+}
+
 
 class Shape {
 protected:
     Point3D massCenter;
-    double height;
-    double length;
-    double width;
+    double height, length, width;
     Point3D velocity;
-
-    double mass;           // AJOUTEZ
-    double restitution;    // AJOUTEZ
+    double mass;
+    double restitution;
+    double gravity;
 
 public:
-    Shape(Point3D c, double h, double L, double W, Point3D v, double m = 500, double e = 0.5)
-        : massCenter(c), height(h), length(L), width(W), velocity(v) {}
+    Shape(Point3D c, double h, double L, double W, Point3D v, double m = 500, double e = 0.5, double g = GRAVITY)
+        : massCenter(c), height(h), length(L), width(W), velocity(v), mass(m), restitution(e), gravity(g) {}
 
-    double distance(const Point3D& point) const {
-        return massCenter.distance(point);
-    };
-
-    virtual void printPosition() const {
-        cout << "Center: (" << massCenter.x << ", "
-             << massCenter.y << ", "
-             << massCenter.z << ")\n";
-    }
-
-    double getMass() const { return mass; }
-    double getRestitution() const { return restitution; }
-
+    virtual double distance(const Point3D& point) const { return massCenter.distance(point); }
+    
     void translate(double dx, double dy, double dz) {
-        massCenter.x += dx;
-        massCenter.y += dy;
-        massCenter.z += dz;
+        massCenter.x += dx; massCenter.y += dy; massCenter.z += dz;
     }
 
     virtual void update(double dt) {
         velocity.y += gravity * dt;
-        massCenter = massCenter + velocity * dt;  // Au lieu de += séparé
+        massCenter = massCenter + velocity * dt;
     }
 
-    // AJOUTEZ applyImpulse:
     void applyImpulse(const Point3D& impulse) {
-        velocity = velocity + impulse * (1.0 / mass);
+        if (isValid(impulse) && mass > 0.0001) {
+            velocity = velocity + impulse * (1.0 / mass);
+        }
     }
 
-    Point3D getCenter() const { 
-        return massCenter; 
-    }
-    Point3D getVelocity() const {
-        return velocity;
-    }
-    double getLength() const { 
-        return length;
-    }
-    double getHeight() const { 
-        return height; 
-    }
-    double getWidth()  const { 
-        return width; 
-    }
-
+    // Getters
+    Point3D getCenter() const { return massCenter; }
+    Point3D getVelocity() const { return velocity; }
+    double getLength() const { return length; }
+    double getHeight() const { return height; }
+    double getWidth()  const { return width; }
+    double getMass() const { return mass; }
+    double getRestitution() const { return restitution; }
+    double getGravity() const { return gravity; }
     virtual ~Shape() {}
 };
 
-//////Distances 
-double L1(const Point3D& a, const Point3D& b) {
-    return std::abs(a.x - b.x) +
-           std::abs(a.y - b.y) +
-           std::abs(a.z - b.z);
-}
-
-double L2(const Point3D& a, const Point3D& b) {
-    double dx = a.x - b.x;
-    double dy = a.y - b.y;
-    double dz = a.z - b.z;
-    return std::sqrt(dx*dx + dy*dy + dz*dz);
-}
-
-//////Sphere
 class Sphere : public Shape {
 private:
     double radius;
 public:
-    Sphere(Point3D c, double diameter, Point3D v, double m = 500, double e = 0.5)
-        : Shape(c, diameter, diameter, diameter, v, m, e), radius(diameter/2) {}
-
-    double getRadius() const { 
-        return radius; 
-    }
-
-    
-    double distance(const Point3D& p) const {
-        return L1(massCenter, p);
-    }
-    
-    void update(double dt) override {
-        Shape::update(dt);
-    }
+    Sphere(Point3D c, double diameter, Point3D v, double m = 500, double e = 0.5, double g = GRAVITY)
+        : Shape(c, diameter, diameter, diameter, v, m, e, g), radius(diameter/2) {}
+        
+    double getRadius() const { return radius; }
 };
 
-
-///////Rigid bodies
 class RigidBody : public Shape {
 protected:
     Point3D angle;
     Point3D angularVelocity;
-    Point3D axes[3]; // local axes
+    Point3D axes[3];
 
 public:
-    RigidBody(Point3D c, double h, double L, double W, Point3D v, Point3D a, Point3D av, double m = 500, double e = 0.5)
-        : Shape(c, h, L, W, v, m, e), angle(a), angularVelocity(av) {
-        axes[0] = {1,0,0};
-        axes[1] = {0,1,0};
-        axes[2] = {0,0,1};
+    RigidBody(Point3D c, double h, double L, double W, Point3D v, Point3D a, Point3D av, double m = 500, double e = 0.5, double g = GRAVITY)
+        : Shape(c, h, L, W, v, m, e, g), angle(a), angularVelocity(av) {
         updateAxes();
     }
-
-    void printAngle() const {
-        cout << "Angles: (" << angle.x << ", " << angle.y << ", " << angle.z << ")\n";
-    }
-
-    double distance(const Point3D& p) const {
-        return L1(massCenter, p);
-    }
-
-
     const Point3D& getAxis(int i) const { return axes[i]; }
-
-    void rotate(double dax, double day, double daz) {
-        angle.x += dax;
-        angle.y += day;
-        angle.z += daz;
-    }
-
-    void setAngularVelocity(const Point3D& av) {
-        angularVelocity = av;
-    }
-
+    
     void updateAxes() {
-        axes[0] = {cos(angle.y)*cos(angle.z), sin(angle.x)*sin(angle.y)*cos(angle.z)-cos(angle.x)*sin(angle.z), cos(angle.x)*sin(angle.y)*cos(angle.z)+sin(angle.x)*sin(angle.z)};
-        axes[1] = {cos(angle.y)*sin(angle.z), sin(angle.x)*sin(angle.y)*sin(angle.z)+cos(angle.x)*cos(angle.z), cos(angle.x)*sin(angle.y)*sin(angle.z)-sin(angle.x)*cos(angle.z)};
-        axes[2] = {-sin(angle.y), sin(angle.x)*cos(angle.y), cos(angle.x)*cos(angle.y)};
+        double cx = cos(angle.x), sx = sin(angle.x);
+        double cy = cos(angle.y), sy = sin(angle.y);
+        double cz = cos(angle.z), sz = sin(angle.z);
+        axes[0] = {cy*cz, sx*sy*cz - cx*sz, cx*sy*cz + sx*sz};
+        axes[1] = {cy*sz, sx*sy*sz + cx*cz, cx*sy*sz - sx*cz};
+        axes[2] = {-sy,   sx*cy,            cx*cy};
     } 
-
     virtual void update(double dt) override {
         Shape::update(dt);
-        angle.x += angularVelocity.x * dt;
-        angle.y += angularVelocity.y * dt;
-        angle.z += angularVelocity.z * dt;
+        angle = angle + angularVelocity * dt;
         updateAxes();
     }
 };
 
 class Cube : public RigidBody {
 public:
-    Cube(Point3D c, double side, Point3D v, Point3D a, Point3D av, double m = 500.0, double e = 0.5)
-        : RigidBody(c, side, side, side, v, a, av, m, e) {}
-
+    Cube(Point3D c, double side, Point3D v, Point3D a, Point3D av, double m, double e, double g)
+        : RigidBody(c, side, side, side, v, a, av, m, e, g) {}
 };
 
 class RectangularPrism : public RigidBody {
 public:
-    RectangularPrism(Point3D c, double h, double L, double W, Point3D v, Point3D a, Point3D av, double m = 500, double e = 0.5)
-        : RigidBody(c, h, L, W, v, a, av, m, e) {}
-
+    RectangularPrism(Point3D c, double h, double L, double W, Point3D v, Point3D a, Point3D av, double m, double e, double g)
+        : RigidBody(c, h, L, W, v, a, av, m, e, g) {}
 };
 
+///////// Collision detection
 
-///// Collision
-//collision between spheres
-bool checkSphereCollision(const Sphere& s1, const Sphere& s2) {
-
-    return s1.getCenter().x * s2.getCenter().x + s1.getCenter().y * s2.getCenter().y + s1.getCenter().z * s2.getCenter().z <= (s1.getRadius() + s2.getRadius());
-}
-
-//collision between two Rigid bodies at angle = (0,0,0)  (for the beginning)
-bool checkRigidNoAngleCollision(const RigidBody& a, const RigidBody& b) {
-    return (abs(a.getCenter().x - b.getCenter().x) <= (a.getLength()/2 + b.getLength()/2)) &&
-           (abs(a.getCenter().y - b.getCenter().y) <= (a.getHeight()/2 + b.getHeight()/2)) &&
-           (abs(a.getCenter().z - b.getCenter().z) <= (a.getWidth()/2 + b.getWidth()/2));
-}
-
-//collision between two Rigid bodies in Oriented Bounding Box 
-/*bool checkOBBCollision(const RigidBody& A, const RigidBody& B) {
-    
-    //vector AB
-    Point3D T = {B.getCenter().x - A.getCenter().x,
-                 B.getCenter().y - A.getCenter().y,
-                 B.getCenter().z - A.getCenter().z};
-
-    double ra, rb;
-    double R[3][3];      // axes for projection 
-    double AbsR[3][3];
-    double t;
-
-    const double EPSILON = 1e-6;
-
-    // Projection matrix
-    for(int i=0; i<3; i++) {
-        const Point3D& Ai = A.getAxis(i);
-        for(int j=0; j<3; j++) {
-            const Point3D& Bj = B.getAxis(j);
-            R[i][j] = Ai.x*Bj.x + Ai.y*Bj.y + Ai.z*Bj.z;
-            AbsR[i][j] = std::abs(R[i][j]) + EPSILON;
-        }
-    }
-
-    //Test axes of A
-    for(int i=0; i<3; i++){
-        const Point3D& Ai = A.getAxis(i);
-        // ra = projection of A half-dimensions on its own axis i
-        switch(i) {
-            case 0: ra = A.getLength() / 2; break;
-            case 1: ra = A.getHeight() / 2; break;
-            case 2: ra = A.getWidth() / 2; break;
-        }
-        
-        // rb = projection of B half-dimensions on A's axis i
-        rb = B.getLength()/2 * AbsR[i][0] + B.getHeight()/2 * AbsR[i][1] + B.getWidth()/2 * AbsR[i][2];
-
-        // t = distance between centers projected on A's axis i
-        t = std::abs(T.x * Ai.x + T.y * Ai.y + T.z * Ai.z);
-        
-        if(t > ra + rb) return false; // Separation found, no collision
-    }
-
-    //Test axes of B
-    for(int i=0; i<3; i++){
-        const Point3D& Bi = B.getAxis(i);
-
-        ra = A.getLength()/2 * AbsR[0][i] + A.getHeight()/2 * AbsR[1][i] + A.getWidth()/2 * AbsR[2][i];
-        
-        switch(i) {
-            case 0: rb = B.getLength() / 2; break;
-            case 1: rb = B.getHeight() / 2; break;
-            case 2: rb = B.getWidth() / 2; break;
-        };
-
-        t = std::abs(T.x * Bi.x + T.y * Bi.y + T.z * Bi.z);
-        if(t > ra + rb) return false; // Separation found
-    }
-
-    //Test cross products of axes (9 tests)
-    for(int i=0; i<3; i++){
-        for(int j=0; j<3; j++){
-            const Point3D& Ai = A.getAxis(i);
-            const Point3D& Bj = B.getAxis(j);
-
-            // ra = projection of A on cross product axis
-            switch(i) {
-                case 0: ra = A.getHeight()/2 * AbsR[1][j] + A.getWidth()/2 * AbsR[2][j]; break;
-                case 1: ra = A.getLength()/2 * AbsR[2][j] + A.getWidth()/2 * AbsR[0][j]; break;
-                case 2: ra = A.getHeight()/2 * AbsR[0][j] + A.getLength()/2 * AbsR[1][j]; break;
-            };
-
-            // rb = projection of B on cross product axis
-            switch(i) {
-                case 0: rb = B.getHeight()/2 * AbsR[i][1] + B.getWidth()/2 * AbsR[i][2]; break;
-                case 1: rb = B.getLength()/2 * AbsR[i][2] + B.getWidth()/2 * AbsR[i][0]; break;
-                case 2: rb = B.getHeight()/2 * AbsR[i][0] + B.getLength()/2 * AbsR[i][1]; break;
-            };
-
-            // t = distance between centers projected onto cross product axis
-            Point3D axis = { 
-                Ai.y*Bj.z - Ai.z*Bj.y,
-                Ai.z*Bj.x - Ai.x*Bj.z,
-                Ai.x*Bj.y - Ai.y*Bj.x
-            };
-
-            t = std::abs(T.x * axis.x + T.y * axis.y + T.z * axis.z);
-            if(t > ra + rb) return false; // Separation found
-        }
-    }
-
-    // No separating axis found = collision
-    return true;
-} */
-
-bool checkOBBCollision(const RigidBody& A, const RigidBody& B) {
-    
-    // Vecteur entre les centres
-    Point3D T = {B.getCenter().x - A.getCenter().x,
-                 B.getCenter().y - A.getCenter().y,
-                 B.getCenter().z - A.getCenter().z};
-
-    double ra, rb, t;
-    double R[3][3];
-    double AbsR[3][3];
-    const double EPSILON = 1e-6;
-    
-    // --- 1. Calcul de la Matrice de Rotation (SIMD OK) ---
-    // C'est ici que tu justifies ton "Micro-parallélisme" dans les slides.
-    for(int i=0; i<3; i++) {
-        const Point3D& Ai = A.getAxis(i);
-        
-        // Le SIMD fonctionne bien ici car c'est un calcul pur sans conditions
-        #pragma omp simd
-        for(int j=0; j<3; j++) {
-            const Point3D& Bj = B.getAxis(j);
-            R[i][j] = Ai.x*Bj.x + Ai.y*Bj.y + Ai.z*Bj.z;
-            AbsR[i][j] = std::abs(R[i][j]) + EPSILON;
-        }
-    }
-
-    // --- 2. Test des Axes de A ---
-    for(int i=0; i<3; i++){
-        const Point3D& Ai = A.getAxis(i);
-        switch(i) {
-            case 0: ra = A.getLength() / 2; break;
-            case 1: ra = A.getHeight() / 2; break;
-            case 2: ra = A.getWidth() / 2; break;
-        }
-        rb = B.getLength()/2 * AbsR[i][0] + B.getHeight()/2 * AbsR[i][1] + B.getWidth()/2 * AbsR[i][2];
-        t = std::abs(T.x * Ai.x + T.y * Ai.y + T.z * Ai.z);
-        
-        if(t > ra + rb) return false; // Séparation trouvée
-    }
-
-    // --- 3. Test des Axes de B ---
-    for(int i=0; i<3; i++){
-        const Point3D& Bi = B.getAxis(i);
-        ra = A.getLength()/2 * AbsR[0][i] + A.getHeight()/2 * AbsR[1][i] + A.getWidth()/2 * AbsR[2][i];
-        switch(i) {
-            case 0: rb = B.getLength() / 2; break;
-            case 1: rb = B.getHeight() / 2; break;
-            case 2: rb = B.getWidth() / 2; break;
-        };
-        t = std::abs(T.x * Bi.x + T.y * Bi.y + T.z * Bi.z);
-        
-        if(t > ra + rb) return false; // Séparation trouvée
-    }
-
-    // --- 4. Test des 9 Produits Vectoriels (Cross Products) ---
-    // On utilise la boucle imbriquée classique car on a besoin du "return false" immédiat.
-    // Les switch/case rendent le SIMD inefficace ici de toute façon.
-    for(int i=0; i<3; i++){
-        const Point3D& Ai = A.getAxis(i);
-        
-        for(int j=0; j<3; j++){
-             const Point3D& Bj = B.getAxis(j);
-
-            // ra = projection de A sur l'axe du produit vectoriel
-            switch(i) {
-                case 0: ra = A.getHeight()/2 * AbsR[1][j] + A.getWidth()/2 * AbsR[2][j]; break;
-                case 1: ra = A.getLength()/2 * AbsR[2][j] + A.getWidth()/2 * AbsR[0][j]; break;
-                case 2: ra = A.getHeight()/2 * AbsR[0][j] + A.getLength()/2 * AbsR[1][j]; break;
-            };
-
-            // rb = projection de B sur l'axe du produit vectoriel
-            switch(i) {
-                case 0: rb = B.getHeight()/2 * AbsR[i][1] + B.getWidth()/2 * AbsR[i][2]; break;
-                case 1: rb = B.getLength()/2 * AbsR[i][2] + B.getWidth()/2 * AbsR[i][0]; break;
-                case 2: rb = B.getHeight()/2 * AbsR[i][0] + B.getLength()/2 * AbsR[i][1]; break;
-            };
-
-            // t = distance projetée
-            // On calcule le produit vectoriel (Cross Product) à la volée
-            Point3D axis = { 
-                Ai.y*Bj.z - Ai.z*Bj.y,
-                Ai.z*Bj.x - Ai.x*Bj.z,
-                Ai.x*Bj.y - Ai.y*Bj.x
-            };
-
-            t = std::abs(T.x * axis.x + T.y * axis.y + T.z * axis.z);
-            
-            if(t > ra + rb) return false; // Séparation trouvée
-        }
-    }
-
-    // Si on arrive ici, aucun axe séparateur n'a été trouvé
-    return true;
-}
-
-//collision between sphere and moving rigid body
 Point3D closestPointOnOBB(const RigidBody& box, const Point3D& p) {
-    Point3D d = {p.x - box.getCenter().x, p.y - box.getCenter().y, p.z - box.getCenter().z};
+    Point3D d = p - box.getCenter();
     Point3D q = box.getCenter();
-
     double halfDims[3] = { box.getLength()/2, box.getHeight()/2, box.getWidth()/2 };
 
     for(int i=0; i<3; i++){
-        const Point3D& axis = box.getAxis(i);
-        double dist = d.x*axis.x + d.y*axis.y + d.z*axis.z;
+        double dist = d.dot(box.getAxis(i));
         if(dist > halfDims[i]) dist = halfDims[i];
         if(dist < -halfDims[i]) dist = -halfDims[i];
-
-        q.x += dist*axis.x;
-        q.y += dist*axis.y;
-        q.z += dist*axis.z;
+        q = q + box.getAxis(i) * dist;
     }
     return q;
 }
 
-bool checkSphereRigidCollision(const Sphere& s, const RigidBody& b) {
-    Point3D closest = closestPointOnOBB(b, s.getCenter());
-    return s.distance(closest) <= s.getRadius();
+bool checkSphereCollision(const Sphere& s1, const Sphere& s2) {
+    return s1.distance(s2.getCenter()) <= (s1.getRadius() + s2.getRadius());
 }
 
-// ===== COLLISION RESOLUTION =====
+bool checkSphereRigidCollision(const Sphere& s, const RigidBody& b) {
+    Point3D closest = closestPointOnOBB(b, s.getCenter());
+    return s.getCenter().distance(closest) <= s.getRadius();
+}
+
+bool checkOBBCollision(const RigidBody& A, const RigidBody& B) {
+    Point3D T = B.getCenter() - A.getCenter();
+    double ra, rb, t;
+    double R[3][3], AbsR[3][3];
+    const double EPSILON = 1e-6;
+    
+    for(int i=0; i<3; i++) for(int j=0; j<3; j++) {
+        R[i][j] = A.getAxis(i).dot(B.getAxis(j));
+        AbsR[i][j] = std::abs(R[i][j]) + EPSILON;
+    }
+
+    for(int i=0; i<3; i++){
+        ra = (i==0?A.getLength():(i==1?A.getHeight():A.getWidth()))/2;
+        rb = B.getLength()/2 * AbsR[i][0] + B.getHeight()/2 * AbsR[i][1] + B.getWidth()/2 * AbsR[i][2];
+        if(std::abs(T.dot(A.getAxis(i))) > ra + rb) return false;
+    }
+    for(int i=0; i<3; i++){
+        ra = A.getLength()/2 * AbsR[0][i] + A.getHeight()/2 * AbsR[1][i] + A.getWidth()/2 * AbsR[2][i];
+        rb = (i==0?B.getLength():(i==1?B.getHeight():B.getWidth()))/2;
+        if(std::abs(T.dot(B.getAxis(i))) > ra + rb) return false;
+    }
+
+    return true; 
+}
+
+/////// resolve collision
+
+double getEffectiveRadius(const RigidBody& rb, const Point3D& normal) {
+    double r = 0.0;
+    r += (rb.getLength() / 2.0) * std::abs(normal.dot(rb.getAxis(0)));
+    r += (rb.getHeight() / 2.0) * std::abs(normal.dot(rb.getAxis(1)));
+    r += (rb.getWidth()  / 2.0) * std::abs(normal.dot(rb.getAxis(2)));
+    return r;
+}
+
 void resolveSphereSphereCollision(Sphere* s1, Sphere* s2) {
-    Point3D center1 = s1->getCenter();
-    Point3D center2 = s2->getCenter();
-    Point3D delta = center2 - center1;
-    
+    Point3D delta = s2->getCenter() - s1->getCenter();
     double dist = delta.length();
-    if(dist < 1e-10) return; // Évite division par zéro
+    double overlap = (s1->getRadius() + s2->getRadius()) - dist;
+
+    Point3D normal;
+    if (dist < 1e-5) normal = {0, -1, 0}; 
+    else normal = delta * (1.0 / dist);
     
-    Point3D normal = delta * (1.0 / dist);
+    if (!isValid(normal)) normal = {0, -1, 0};
+
     Point3D relVel = s2->getVelocity() - s1->getVelocity();
+    if(relVel.dot(normal) > 0) return;
+
+    double m1 = 1.0/s1->getMass(), m2 = 1.0/s2->getMass();
+    double j = -(1 + std::min(s1->getRestitution(), s2->getRestitution())) * relVel.dot(normal);
+    j /= (m1 + m2);
     
-    double velAlongNormal = relVel.dot(normal);
-    if(velAlongNormal > 0) return;
+    if (std::isfinite(j)) {
+        s1->applyImpulse(normal * -j);
+        s2->applyImpulse(normal * j);
+    }
+
+    if(overlap > 0.01) {
+        Point3D corr = normal * (overlap * 0.8 / (m1 + m2));
+        if (isValid(corr)) {
+            s1->translate(-corr.x * m1, -corr.y * m1, -corr.z * m1);
+            s2->translate( corr.x * m2,  corr.y * m2,  corr.z * m2);
+        }
+    }
+}
+
+void resolveRigidRigidCollision(RigidBody* r1, RigidBody* r2) {
+    Point3D delta = r2->getCenter() - r1->getCenter();
+    double dist = delta.length();
     
-    double e = std::min(s1->getRestitution(), s2->getRestitution());
-    double j = -(1 + e) * velAlongNormal;
-    j /= (1.0/s1->getMass() + 1.0/s2->getMass());
+    Point3D normal;
+    if (dist < 1e-5) normal = {0, -1, 0}; 
+    else normal = delta * (1.0 / dist);
+    if (!isValid(normal)) normal = {0, -1, 0};
+
+    double r1_ext = getEffectiveRadius(*r1, normal);
+    double r2_ext = getEffectiveRadius(*r2, normal);
+    double overlap = (r1_ext + r2_ext) - dist;
+
+    Point3D relVel = r2->getVelocity() - r1->getVelocity();
+    if(relVel.dot(normal) > 0) return;
     
-    Point3D impulse = normal * j;
-    s1->applyImpulse(impulse * -1.0);
-    s2->applyImpulse(impulse);
+    double m1 = 1.0/r1->getMass(), m2 = 1.0/r2->getMass();
+    double j = -(1 + std::min(r1->getRestitution(), r2->getRestitution())) * relVel.dot(normal);
+    j /= (m1 + m2);
+    
+    if (std::isfinite(j)) {
+        r1->applyImpulse(normal * -j);
+        r2->applyImpulse(normal * j);
+    }
+
+    if(overlap > 0.01) {
+        Point3D corr = normal * (overlap * 0.8 / (m1 + m2));
+        if (isValid(corr)) {
+            r1->translate(-corr.x * m1, -corr.y * m1, -corr.z * m1);
+            r2->translate( corr.x * m2,  corr.y * m2,  corr.z * m2);
+        }
+    }
 }
 
 void resolveSphereRigidCollision(Sphere* s, RigidBody* r) {
     Point3D closest = closestPointOnOBB(*r, s->getCenter());
     Point3D delta = s->getCenter() - closest;
-    
     double dist = delta.length();
-    if(dist < 1e-10) return;
     
-    Point3D normal = delta * (1.0 / dist);
+    double overlap = s->getRadius() - dist;
+    Point3D normal;
+    
+    if(dist < 1e-5) { 
+        Point3D dir = s->getCenter() - r->getCenter();
+        double centerDist = dir.length();
+        if (centerDist < 1e-5) normal = {0, -1, 0};
+        else normal = dir * (1.0 / centerDist);
+        overlap = s->getRadius();
+    } else {
+        normal = delta * (1.0 / dist);
+    }
+    
+    if (!isValid(normal)) normal = {0, -1, 0};
+
     Point3D relVel = s->getVelocity() - r->getVelocity();
+    if(relVel.dot(normal) > 0) return;
     
-    double velAlongNormal = relVel.dot(normal);
-    if(velAlongNormal > 0) return;
+    double mS = 1.0/s->getMass(), mR = 1.0/r->getMass();
+    double j = -(1 + std::min(s->getRestitution(), r->getRestitution())) * relVel.dot(normal);
+    j /= (mS + mR);
     
-    double e = std::min(s->getRestitution(), r->getRestitution());
-    double j = -(1 + e) * velAlongNormal;
-    j /= (1.0/s->getMass() + 1.0/r->getMass());
-    
-    Point3D impulse = normal * j;
-    s->applyImpulse(impulse);
-    r->applyImpulse(impulse * -1.0);
-}
+    if (std::isfinite(j)) {
+        s->applyImpulse(normal * j);
+        r->applyImpulse(normal * -j);
+    }
 
-void resolveRigidRigidCollision(RigidBody* r1, RigidBody* r2) {
-    // Collision simplifiée pour rigid-rigid (utilise les centres)
-    Point3D delta = r2->getCenter() - r1->getCenter();
-    double dist = delta.length();
-    if(dist < 1e-10) return;
-    
-    Point3D normal = delta * (1.0 / dist);
-    Point3D relVel = r2->getVelocity() - r1->getVelocity();
-    
-    double velAlongNormal = relVel.dot(normal);
-    if(velAlongNormal > 0) return;
-    
-    double e = std::min(r1->getRestitution(), r2->getRestitution());
-    double j = -(1 + e) * velAlongNormal;
-    j /= (1.0/r1->getMass() + 1.0/r2->getMass());
-    
-    Point3D impulse = normal * j;
-    r1->applyImpulse(impulse * -1.0);
-    r2->applyImpulse(impulse);
-}
-
-// Test /////////////////////////////
-void logStep(int step, double time, string msg) {
-    cout << "[Step " << step << " | t=" << fixed << setprecision(2) << time << "] " << msg << endl;
-}
-
-void testSphereCollisionSequence() {
-    cout << "\n--- TEST 1: Collision of moving Spheres ---\n";
-    Sphere s1({-5, 0, 0}, 2.0, {2, 0, 0}); 
-    Sphere s2({5, 0, 0}, 2.0, {-2, 0, 0});
-
-    double dt = 0.1;
-    for (int i = 0; i <= 20; i++) {
-        s1.update(dt);
-        s2.update(dt);
-
-        bool collide = checkSphereCollision(s1, s2);
-        
-        if (abs(s1.getCenter().x) < 3.0) {
-            cout << "S1: " << s1.getCenter().x << " | S2: " << s2.getCenter().x 
-                 << " -> Collision: " << (collide ? "YES" : "NO") << endl;
+    if(overlap > 0.01) {
+        Point3D corr = normal * (overlap * 0.8 / (mS + mR));
+        if (isValid(corr)) {
+            s->translate( corr.x * mS,  corr.y * mS,  corr.z * mS);
+            r->translate(-corr.x * mR, -corr.y * mR, -corr.z * mR);
         }
     }
 }
 
-void testOBBRotation() {
-    cout << "\n--- TEST 2: Rotating Cubes (Test OBB) ---\n";
-    
-    Cube c1({0, 0, 0}, 2.0, {0, 0, 0}, {0, 0, 0}, {0, 0, 0});
-    
-    Cube c2({0, 5, 0}, 2.0, {0, -1, 0}, {0, 0, 0}, {0, 0, 1});
+/////// simulation
 
-    double dt = 0.1;
-    bool hit = false;
+void simulationStep(vector<Shape*>& shapes, double dt, long long& nbCollisions) {
+    int N = shapes.size();
+    #pragma omp parallel for
+    for (int i = 0; i < N; ++i) shapes[i]->update(dt);
 
-    for (int i = 0; i < 40; i++) {
-        c2.update(dt); 
+    // Collisions
+    for (int i = 0; i < N; ++i) {
+        for (int j = i + 1; j < N; ++j) {
+            Sphere* s1 = dynamic_cast<Sphere*>(shapes[i]);
+            Sphere* s2 = dynamic_cast<Sphere*>(shapes[j]);
+            RigidBody* r1 = dynamic_cast<RigidBody*>(shapes[i]);
+            RigidBody* r2 = dynamic_cast<RigidBody*>(shapes[j]);
 
-        if (checkOBBCollision(c1, c2)) {
-            cout << "!! COLLISION DETECTED at t=" << i * dt 
-                 << " | C2 Y=" << c2.getCenter().y 
-                 << " | Angle Z=" << fixed << setprecision(2) << 3.14159
-                 << endl;
-            hit = true;
-            break; 
-        }
-    }
-    
-    if (!hit) cout << "test failed : no collision détected." << endl;
-}
-
-void testMixedCollision() {
-    cout << "\n--- TEST 3: Sphere vs Rigid Box ---\n";
-    RectangularPrism sol({0, -2, 0}, 1, 10, 10, {0,0,0}, {0,0,0}, {0,0,0});
-    
-    Sphere s({0, 5, 0}, 2.0, {0, -2, 0});
-
-    double dt = 0.1;
-    for(int i=0; i<30; i++) {
-        s.update(dt);
-        if (checkSphereRigidCollision(s, sol)) {
-            cout << "Impact Sphere-Sol a t=" << i*dt << " Hauteur S=" << s.getCenter().y << endl;
-            break;
+            bool hit = false;
+            if (s1 && s2) { if (checkSphereCollision(*s1, *s2)) { resolveSphereSphereCollision(s1, s2); hit=true; } }
+            else if (r1 && r2) { if (checkOBBCollision(*r1, *r2)) { resolveRigidRigidCollision(r1, r2); hit=true; } }
+            else if (s1 && r2) { if (checkSphereRigidCollision(*s1, *r2)) { resolveSphereRigidCollision(s1, r2); hit=true; } }
+            else if (r1 && s2) { if (checkSphereRigidCollision(*s2, *r1)) { resolveSphereRigidCollision(s2, r1); hit=true; } }
+            if (hit) nbCollisions++;
         }
     }
 }
 
-double randDouble(double min, double max) {
-    return min + (double)rand() / RAND_MAX * (max - min);
-}
-
-int no_main() {
+///// test 
+int main() {
     srand(time(0));
     
-    // 1. CONFIGURATION
-    int N = 2000;
-    int STEPS = 50;
-    double dt = 0.01;
-    
     vector<Shape*> shapes;
-    
-    cout << "Initialisation of " << N << " object" << endl;
-    
-    // 2. GENERATION
-    for(int i=0; i<N; i++) {
-        Point3D pos = {randDouble(-50,50), randDouble(-50,50), randDouble(-50,50)};
-        Point3D vel = {randDouble(-5,5), randDouble(-5,5), randDouble(-5,5)};
-        
-        if (i % 2 == 0) {
-            shapes.push_back(new Sphere(pos, randDouble(1, 3), vel));
-        } else {
-            Point3D angle = {randDouble(0, 3), randDouble(0, 3), randDouble(0, 3)};
-            Point3D angVel = {randDouble(-1, 1), randDouble(-1, 1), randDouble(-1, 1)};
-            shapes.push_back(new Cube(pos, randDouble(1, 3), vel, angle, angVel));
-        }
-    }
+    double dt = 0.01;
+    int STEPS = 150; // 1.5 seconds
 
-    cout << "Beginning of the simulation..." << endl;
-    auto start = std::chrono::high_resolution_clock::now();
-    
-    long long collisionsDetected = 0;
+    cout << "physics engine test" << endl;
+    cout << "1. Sphere vs Sphere (X=-10)" << endl;
+    cout << "2. Cube vs Cube     (X=  0)" << endl;
+    cout << "3. Sphere vs Floor  (X= 10)" << endl;
+    cout << "4. Slab vs Sphere   (X= 20)" << endl;
 
-    // 3. SIMULATION LOOP
-    for(int step=0; step<STEPS; step++) {
-        
-        #pragma omp parallel for
-        for(int i=0; i<N; i++) {
-            shapes[i]->update(dt);
-        }
-        
-        // B. Collision Detection
-        // collapse(2) : fusionne les boucles i et j pour faire un seul gros tas de tâches
-        // schedule(dynamic) : important car certains tests (Cube-Cube) sont plus longs que d'autres (Sphere-Sphere)
-        // reduction(+:collisionsDetected) : chaque thread compte dans son coin, et on additionne tout à la fin
-        
-        #pragma omp parallel for schedule(dynamic) reduction(+:collisionsDetected)
-        for(int i=0; i<N; i++) {
-            for(int j=i+1; j<N; j++) {
-                
-                bool collision = false;
-                
-                // ... (votre logique de dynamic_cast reste identique) ...
-                Sphere* s1 = dynamic_cast<Sphere*>(shapes[i]);
-                Sphere* s2 = dynamic_cast<Sphere*>(shapes[j]);
-                RigidBody* r1 = dynamic_cast<RigidBody*>(shapes[i]);
-                RigidBody* r2 = dynamic_cast<RigidBody*>(shapes[j]);
+    // 1: Sphere vs Sphere (Both moving)
+    // Top sphere falling, Bottom sphere rising
+    shapes.push_back(new Sphere({-10, -5, 0}, 2.0, {0, 5, 0}, 1.0, 0.8, 9.81));
+    shapes.push_back(new Sphere({-10, 5, 0}, 2.0, {0, -5, 0}, 1.0, 0.8, 9.81));
 
-                if(s1 && s2) collision = checkSphereCollision(*s1, *s2);
-                else if(r1 && r2) collision = checkOBBCollision(*r1, *r2);
-                else if(s1 && r2) collision = checkSphereRigidCollision(*s1, *r2);
-                else if(r1 && s2) collision = checkSphereRigidCollision(*s2, *r1);
+    // 2: Cube vs Cube (Both moving)
+    // Top cube falling, Bottom cube rising
+    shapes.push_back(new Cube({0, -5, 0}, 4.0, {0, 5, 0}, {0,0,0}, {0,0,0}, 1.0, 0.8, 9.81));
+    shapes.push_back(new Cube({0, 5, 0}, 4.0, {0, -5, 0}, {0,0,0}, {0,0,0}, 1.0, 0.8, 9.81));
 
-                if(collision) {
-                    collisionsDetected++; 
-                }
-            }
+    // 3: Sphere vs Static Cube (Floor)
+    // Sphere falling (G=9.81) on fixed Cube (G=0.0, Mass=Huge)
+    shapes.push_back(new Sphere({10, -5, 0}, 2.0, {0, 0, 0}, 1.0, 0.8, 9.81));
+    shapes.push_back(new Cube({10, 5, 0}, 4.0, {0, 0, 0}, {0,0,0}, {0,0,0}, 1e10, 0.5, 0.0));
+
+    // 4: Rectangular Prism (Slab) vs Static Sphere
+    // Flat slab falling (G=9.81) on fixed Sphere (G=0.0)
+    // Testing getEffectiveRadius logic
+    shapes.push_back(new RectangularPrism({20, -5, 0}, 1.0, 8.0, 4.0, {0, 0, 0}, {0,0,0}, {0,0,0}, 1.0, 0.5, 9.81));
+    shapes.push_back(new Sphere({20, 5, 0}, 4.0, {0, 0, 0}, 1e10, 0.5, 0.0));
+
+    long long totalCollisions = 0;
+
+    for(int step = 0; step < STEPS; step++) {
+        simulationStep(shapes, dt, totalCollisions);
+
+        if (step % 5 == 0) {
+            cout << "t=" << fixed << setprecision(2) << step*dt << "s | ";
+            
+            cout << "S-S: " << setw(5) << shapes[0]->getCenter().y << " | ";
+            cout << "C-C: " << setw(5) << shapes[2]->getCenter().y << " | ";
+            cout << "S-F: " << setw(5) << shapes[4]->getCenter().y << " | ";
+            cout << "P-S: " << setw(5) << shapes[6]->getCenter().y << endl;
         }
     }
     
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> diff = end - start;
-
-    cout << "------------------------------------------------" << endl;
-    cout << "Time spent : " << diff.count() << " s" << endl;
-    cout << "Collisions   : " << collisionsDetected << endl;
-    cout << "Performance  : " << (double)(N*N*STEPS)/diff.count() / 1e6 << " MTests/sec" << endl;
-    cout << "------------------------------------------------" << endl;
+    cout << "Total Collisions: " << totalCollisions << endl;
 
     for(auto s : shapes) delete s;
-    
     return 0;
 }
