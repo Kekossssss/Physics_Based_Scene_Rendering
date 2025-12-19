@@ -46,10 +46,10 @@
 #define ONLY_FINAL_FRAME false
 
 // Images resolution for the GPU to render
-#define IMAGE_RESOLUTION_WIDTH 1920
-#define IMAGE_RESOLUTION_WIDTH_FLOAT 1920.0
-#define IMAGE_RESOLUTION_HEIGHT 1080
-#define IMAGE_RESOLUTION_HEIGHT_FLOAT 1080.0
+#define IMAGE_RESOLUTION_WIDTH 640
+#define IMAGE_RESOLUTION_WIDTH_FLOAT 640.0
+#define IMAGE_RESOLUTION_HEIGHT 320
+#define IMAGE_RESOLUTION_HEIGHT_FLOAT 320.0
 #define RESOLUTION IMAGE_RESOLUTION_WIDTH*IMAGE_RESOLUTION_HEIGHT
 
 // Image real size in the space
@@ -100,7 +100,7 @@
 // Camera viewing position
 #define CAMERA_X IMAGE_WIDTH/2.0
 #define CAMERA_Y IMAGE_HEIGHT/2.0
-#define CAMERA_Z -BOX_DEPTH*2000.0
+#define CAMERA_Z -BOX_DEPTH*2.0
 
 //------------------------------------------------------------------------------------------//
 // GPU benchmarking structure
