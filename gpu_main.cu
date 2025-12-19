@@ -327,19 +327,19 @@ int main(int argc, char **argv)
 
     // Create scene
     std::vector<Shape *> shapes;
-    shapes.push_back(new Sphere(Point3D(50, 50, 10), 100, Point3D(0, 0, 0), 10, 0.5, 9.81));
-    shapes.push_back(new Cube(Point3D(500, 200, 20), 200, Point3D(0, 0, 0),
-                              Point3D(0, 0, 0), Point3D(0.1, 0.1, 0.1), 10, 0.5, 9.81));
+    shapes.push_back(new Sphere(Point3D(50, 50, 10), 100, Point3D(0, 0, 0), 500, 0.8, 9.81));
+    shapes.push_back(new Cube(Point3D(300, 200, 20), 200, Point3D(-100, 0, 0),
+                              Point3D(0, 0, 0), Point3D(0.1, 0.1, 0.1), 10, 0.8, 9.81));
     shapes.push_back(new RectangularPrism(Point3D(100, 100, 50), 400, 300, 200,
-                                          Point3D(5, 5, 0), Point3D(0, 0, 0),
-                                          Point3D(0, 0, 0), 10, 0.5, 9.81));
-    shapes.push_back(new Sphere(Point3D(130, 50, 10), 100, Point3D(0, 0, 0), 10, 0.5, 9.81));
+                                          Point3D(100, 5, 0), Point3D(0, 0, 0),
+                                          Point3D(0, 0, 0), 10, 0.8, 9.81));
+    shapes.push_back(new Sphere(Point3D(130, 50, 10), 100, Point3D(0, 0, 0), 10, 0.8, 9.81));
 
     // GPU conversion
     int numObjects = convertSceneToGPU(shapes, tab_pos, true);
     std::cout << "Converted " << numObjects << " objects\n";
 
-    double dt = 1 / 60;
+    double dt = 1.0 / 60.0 * 10.0;
 
     // Double buffering: two image arrays
     image_array image_current;
@@ -447,9 +447,9 @@ int main(int argc, char **argv)
         }
 
         int N = (int)shapes.size();
-        for (int i = 0;i < N;i++)
+        for (int k = 0;k < N;i++)
         {
-            shapes[i]->update(dt);
+            shapes[k]->update(dt);
         }
 
         if (i % 5 == 0) {
@@ -458,13 +458,13 @@ int main(int argc, char **argv)
         }
 
         #pragma omp parallel for schedule(dynamic) reduction(+:collisionsDetected,collisionsResolved)
-        for(int i=0; i<N; i++) {
-            for(int j=i+1; j<N; j++) {
+        for(int k=0; k<N; k++) {
+            for(int j=k+1; j<N; j++) {
                 bool collision = false;
                 
-                Sphere* s1 = dynamic_cast<Sphere*>(shapes[i]);
+                Sphere* s1 = dynamic_cast<Sphere*>(shapes[k]);
                 Sphere* s2 = dynamic_cast<Sphere*>(shapes[j]);
-                RigidBody* r1 = dynamic_cast<RigidBody*>(shapes[i]);
+                RigidBody* r1 = dynamic_cast<RigidBody*>(shapes[k]);
                 RigidBody* r2 = dynamic_cast<RigidBody*>(shapes[j]);
 
                 if(s1 && s2) {

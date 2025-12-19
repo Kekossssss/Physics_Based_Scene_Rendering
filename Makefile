@@ -12,7 +12,7 @@ main_cpu:  cpu_main.cpp
 	g++ $(GCCFLAGS) utils.cpp cpu_renderer.cpp cpu_main.cpp -o main_cpu 
 
 main_gpu : gpu_main.cu
-	nvcc $(NVFLAGS) -o gpu_main gpu_main.cu utils.cpp cpu_part.cpp
+	nvcc $(NVFLAGS) -o gpu_main gpu_main.cu utils.cpp cpu_part.cpp gpu_part.cu
 
 .PHONY: gpu
 all: gpu_exec

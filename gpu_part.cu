@@ -1084,6 +1084,16 @@ void compute_bench_values(int i, values_benchmarking& bench_values, time_benchma
         }
     }
 }
+
+void synchronize_gpu_image(bool image_is_valid, gpu_object_pointers *gpu_obj_pointers, cudaStream_t *gpu_stream) {
+    for (int i = 0; i < NB_STREAM; i++) {
+        if (image_is_valid==true and (gpu_obj_pointers[i].state == COPY_TO_GPU or gpu_obj_pointers[i].state == COPY_AND_COMPUTE or gpu_obj_pointers[i].state == ALL_ACTIONS)) {
+            if (cudaStreamSynchronize(gpu_stream[i]) != cudaSuccess) {
+                printf("Cuda Synchronization for stream %d as failed\n", i);
+            }
+        }
+    }
+}
 /*
 //------------------------------------------------------------------------------------------//
 // Main

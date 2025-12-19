@@ -149,20 +149,27 @@ void resolveSphereSphereCollision(Sphere* s1, Sphere* s2) {
     Point3D relVel = s2->getVelocity() - s1->getVelocity();
     if(relVel.dot(normal) > 0) return;
 
-    double m1 = 1.0/s1->getMass(), m2 = 1.0/s2->getMass();
-    double j = -(1 + std::min(s1->getRestitution(), s2->getRestitution())) * relVel.dot(normal);
-    j /= (m1 + m2);
+    // CORRECTION: utiliser les masses directement
+    double m1 = s1->getMass();
+    double m2 = s2->getMass();
+    double totalMass = m1 + m2;
+    
+    double e = std::min(s1->getRestitution(), s2->getRestitution());
+    double j = -(1 + e) * relVel.dot(normal) / totalMass;
     
     if (std::isfinite(j)) {
         s1->applyImpulse(normal * -j);
         s2->applyImpulse(normal * j);
     }
 
+    // Position correction avec les bonnes masses
     if(overlap > 0.01) {
-        Point3D corr = normal * (overlap * 0.8 / (m1 + m2));
+        double ratio1 = m2 / totalMass;
+        double ratio2 = m1 / totalMass;
+        Point3D corr = normal * (overlap * 0.5); // Réduit de 0.8 à 0.5
         if (isValid(corr)) {
-            s1->translate(-corr.x * m1, -corr.y * m1, -corr.z * m1);
-            s2->translate( corr.x * m2,  corr.y * m2,  corr.z * m2);
+            s1->translate(-corr.x * ratio1, -corr.y * ratio1, -corr.z * ratio1);
+            s2->translate( corr.x * ratio2,  corr.y * ratio2,  corr.z * ratio2);
         }
     }
 }
@@ -183,20 +190,27 @@ void resolveRigidRigidCollision(RigidBody* r1, RigidBody* r2) {
     Point3D relVel = r2->getVelocity() - r1->getVelocity();
     if(relVel.dot(normal) > 0) return;
     
-    double m1 = 1.0/r1->getMass(), m2 = 1.0/r2->getMass();
-    double j = -(1 + std::min(r1->getRestitution(), r2->getRestitution())) * relVel.dot(normal);
-    j /= (m1 + m2);
+    // CORRECTION: utiliser les masses directement
+    double m1 = r1->getMass();
+    double m2 = r2->getMass();
+    double totalMass = m1 + m2;
+    
+    double e = std::min(r1->getRestitution(), r2->getRestitution());
+    double j = -(1 + e) * relVel.dot(normal) / totalMass;
     
     if (std::isfinite(j)) {
         r1->applyImpulse(normal * -j);
         r2->applyImpulse(normal * j);
     }
 
+    // Position correction avec les bonnes masses
     if(overlap > 0.01) {
-        Point3D corr = normal * (overlap * 0.8 / (m1 + m2));
+        double ratio1 = m2 / totalMass;
+        double ratio2 = m1 / totalMass;
+        Point3D corr = normal * (overlap * 0.5);
         if (isValid(corr)) {
-            r1->translate(-corr.x * m1, -corr.y * m1, -corr.z * m1);
-            r2->translate( corr.x * m2,  corr.y * m2,  corr.z * m2);
+            r1->translate(-corr.x * ratio1, -corr.y * ratio1, -corr.z * ratio1);
+            r2->translate( corr.x * ratio2,  corr.y * ratio2,  corr.z * ratio2);
         }
     }
 }
@@ -224,23 +238,31 @@ void resolveSphereRigidCollision(Sphere* s, RigidBody* r) {
     Point3D relVel = s->getVelocity() - r->getVelocity();
     if(relVel.dot(normal) > 0) return;
     
-    double mS = 1.0/s->getMass(), mR = 1.0/r->getMass();
-    double j = -(1 + std::min(s->getRestitution(), r->getRestitution())) * relVel.dot(normal);
-    j /= (mS + mR);
+    // CORRECTION: utiliser les masses directement
+    double mS = s->getMass();
+    double mR = r->getMass();
+    double totalMass = mS + mR;
+    
+    double e = std::min(s->getRestitution(), r->getRestitution());
+    double j = -(1 + e) * relVel.dot(normal) / totalMass;
     
     if (std::isfinite(j)) {
         s->applyImpulse(normal * j);
         r->applyImpulse(normal * -j);
     }
 
+    // Position correction avec les bonnes masses
     if(overlap > 0.01) {
-        Point3D corr = normal * (overlap * 0.8 / (mS + mR));
+        double ratioS = mR / totalMass;
+        double ratioR = mS / totalMass;
+        Point3D corr = normal * (overlap * 0.5);
         if (isValid(corr)) {
-            s->translate( corr.x * mS,  corr.y * mS,  corr.z * mS);
-            r->translate(-corr.x * mR, -corr.y * mR, -corr.z * mR);
+            s->translate( corr.x * ratioS,  corr.y * ratioS,  corr.z * ratioS);
+            r->translate(-corr.x * ratioR, -corr.y * ratioR, -corr.z * ratioR);
         }
     }
 }
+
 
 /////// simulation
 
