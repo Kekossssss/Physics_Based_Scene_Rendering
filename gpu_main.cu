@@ -70,7 +70,7 @@ public:
                 "singularity exec ffmpeg_latest.sif "
          "ffmpeg -y -f rawvideo -pixel_format rgb24 -video_size %dx%d "
          "-framerate %d -i - -c:v libx264 -preset ultrafast -crf 18 "
-         "-pix_fmt yuv420p -movflags +faststart %s //2>/dev/null",
+         "-pix_fmt yuv420p -movflags +faststart %s 2>/dev/null",
                  width, height, fps, filename); 
 
         std::cout << "Opening FFmpeg pipe...\n";
@@ -299,7 +299,7 @@ void copyImageArray(const image_array &src, image_array &dst)
 }
 
 
-#define RENDERED_FRAMES 100
+#define RENDERED_FRAMES 1000
 
 //------------------------------------------------------------------------------------------//
 // CPU Functions (Video Memory Management)
@@ -1681,13 +1681,13 @@ int main(int argc, char **argv)
 
     // Create scene
     std::vector<Shape *> shapes;
-    shapes.push_back(new Sphere(Point3D(50, 50, 10), 100, Point3D(0, 0, 0)));
-    shapes.push_back(new Cube(Point3D(200, 200, 20), 200, Point3D(0, 0, 0),
-                              Point3D(0, 0, 0), Point3D(0.1, 0.1, 0.1)));
+    shapes.push_back(new Sphere(Point3D(50, 50, 10), 100, Point3D(0, 0, 0), 10, 0.5, 9.81));
+    shapes.push_back(new Cube(Point3D(500, 200, 20), 200, Point3D(0, 0, 0),
+                              Point3D(0, 0, 0), Point3D(0.1, 0.1, 0.1), 10, 0.5, 9.81));
     shapes.push_back(new RectangularPrism(Point3D(100, 100, 50), 400, 300, 200,
                                           Point3D(5, 5, 0), Point3D(0, 0, 0),
-                                          Point3D(0, 0, 0)));
-    shapes.push_back(new Sphere(Point3D(130, 50, 10), 100, Point3D(0, 0, 0)));
+                                          Point3D(0, 0, 0), 10, 0.5, 9.81));
+    shapes.push_back(new Sphere(Point3D(130, 50, 10), 100, Point3D(0, 0, 0), 10, 0.5, 9.81));
 
     // GPU conversion
     int numObjects = convertSceneToGPU(shapes, tab_pos, true);
@@ -1703,6 +1703,11 @@ int main(int argc, char **argv)
     image_current.green = new unsigned char[RESOLUTION];
     image_current.blue = new unsigned char[RESOLUTION];
     image_current.alpha = new unsigned char[RESOLUTION];
+
+    memset(image_current.red, 128, img_size);
+    memset(image_current.green, 128, img_size);
+    memset(image_current.blue, 128, img_size);
+    memset(image_current.alpha, 255, img_size);
     
     // Double buffering for RGB data (for FFmpeg)
     unsigned char *rgb_buffer_1 = new unsigned char[img_size * 3];
@@ -1789,37 +1794,21 @@ int main(int argc, char **argv)
             print_intermediate_bench_values(i, time_table);
             compute_bench_values(i, bench_values, time_table);
         }
+        
+        if (i % 5 == 0) {
+            std::cout << "1- S-S: " << shapes[0]->getCenter().y << " | ";
+            std::cout << "C-C: " << shapes[2]->getCenter().y << " | ";
+        }
 
-        int N = (int)shapes.size() - 1;
+        int N = (int)shapes.size();
         for (int i = 0;i < N;i++)
         {
             shapes[i]->update(dt);
         }
 
-        bool resolveCollisions = true; 
-        #pragma omp parallel for schedule(dynamic) reduction(+:collisionsDetected,collisionsResolved)
-        for (int i = 0; i < N; i++) {
-            for (int j = i + 1; j < N; j++) {
-                bool collision = false;
-                
-                Sphere* s1 = dynamic_cast<Sphere*>(shapes[i]);
-                Sphere* s2 = dynamic_cast<Sphere*>(shapes[j]);
-                RigidBody* r1 = dynamic_cast<RigidBody*>(shapes[i]);
-                RigidBody* r2 = dynamic_cast<RigidBody*>(shapes[j]);
-
-                if(s1 && s2) {
-                    collision = checkSphereCollision(*s1, *s2);
-                    if(collision && resolveCollisions) {
-                        resolveSphereSphereCollision(s1, s2);
-                        collisionsResolved++;
-                    }
-                }
-                else if(r1 && r2) collision = checkOBBCollision(*r1, *r2);
-                else if(s1 && r2) collision = checkSphereRigidCollision(*s1, *r2);
-                else if(r1 && s2) collision = checkSphereRigidCollision(*s2, *r1);
-
-                if(collision) collisionsDetected++;
-            }
+        if (i % 5 == 0) {
+            std::cout << "2 - S-S: " << shapes[0]->getCenter().y << " | ";
+            std::cout << "C-C: " << shapes[2]->getCenter().y << " | ";
         }
 
         #pragma omp parallel for schedule(dynamic) reduction(+:collisionsDetected,collisionsResolved)
@@ -1863,6 +1852,11 @@ int main(int argc, char **argv)
 
                 if(collision) collisionsDetected++;
             }
+        }
+
+        if (i % 5 == 0) {
+            std::cout << "S-S: " << shapes[0]->getCenter().y << " | ";
+            std::cout << "C-C: " << shapes[2]->getCenter().y << " | ";
         }
         
         convertSceneToGPU(shapes, tab_pos, true);

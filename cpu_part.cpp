@@ -266,7 +266,7 @@ void simulationStep(vector<Shape*>& shapes, double dt, long long& nbCollisions) 
         }
     }
 }
-
+/*
 ///// test 
 int main() {
     srand(time(0));
@@ -321,4 +321,4 @@ int main() {
 
     for(auto s : shapes) delete s;
     return 0;
-}
+}*/
