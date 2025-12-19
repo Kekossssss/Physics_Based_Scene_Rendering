@@ -62,7 +62,7 @@ inline void convertShapeToGPU(const Shape *shape, object_to_gpu &gpuObj, int ind
         if (sphere)
         {
             gpuObj.nb_dim[index] = 1;
-            gpuObj.dimension[index][0] = static_cast<float>(sphere->getDiameter());
+            gpuObj.dimension[index][0] = static_cast<float>(sphere->getDiameter())/2.0;
             gpuObj.dimension[index][1] = 0.0f;
             gpuObj.dimension[index][2] = 0.0f;
         }
