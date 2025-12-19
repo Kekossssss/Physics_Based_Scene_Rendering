@@ -1684,16 +1684,17 @@ int main(int argc, char **argv)
     shapes.push_back(new Sphere(Point3D(50, 50, 10), 100, Point3D(0, 0, 0), 10, 0.5, 9.81));
     shapes.push_back(new Cube(Point3D(500, 200, 20), 200, Point3D(0, 0, 0),
                               Point3D(0, 0, 0), Point3D(0.1, 0.1, 0.1), 10, 0.5, 9.81));
-    shapes.push_back(new RectangularPrism(Point3D(100, 100, 50), 400, 300, 200,
+    shapes.push_back(new Cube(Point3D(100, 100, 50), 400,
                                           Point3D(5, 5, 0), Point3D(0, 0, 0),
                                           Point3D(0, 0, 0), 10, 0.5, 9.81));
     shapes.push_back(new Sphere(Point3D(130, 50, 10), 100, Point3D(0, 0, 0), 10, 0.5, 9.81));
+    shapes.push_back(new Sphere(Point3D(700, 50, 10), 100, Point3D(0, 0, 0), 10, 0.5, 9.81));
 
     // GPU conversion
     int numObjects = convertSceneToGPU(shapes, tab_pos, true);
     std::cout << "Converted " << numObjects << " objects\n";
 
-    double dt = 1 / 60;
+    double dt = 1.0 / 60.0;
 
     // Double buffering: two image arrays
     image_array image_current;
@@ -1780,35 +1781,18 @@ int main(int argc, char **argv)
         {
             before_image_draw = std::chrono::high_resolution_clock::now();
         }
-        
-        
-        //Update GPU state & Render
-        auto start_render = std::chrono::high_resolution_clock::now();
-        updateGPUPhysicsState(shapes, tab_pos, numObjects);
-        image_validity = draw_image(tab_pos, image_current, gpu_id_array, gpu_image, gpu_obj_pointers, gpu_stream, numBlocks, threadsPerBlock);
-        auto end_render = std::chrono::high_resolution_clock::now();
-        if (DEBUG_PERF)
-        {
-            benchmark_performance(i, before_image_draw, time_table, gpu_obj_pointers, gpu_stream);
-            reinit_terminal(i);
-            print_intermediate_bench_values(i, time_table);
-            compute_bench_values(i, bench_values, time_table);
-        }
-        
-        if (i % 5 == 0) {
-            std::cout << "1- S-S: " << shapes[0]->getCenter().y << " | ";
-            std::cout << "C-C: " << shapes[2]->getCenter().y << " | ";
+
+        for(int i = 0; i < shapes.size(); i++) {
+            Point3D pos = shapes[i]->getCenter();
+            Point3D vel = shapes[i]->getVelocity();
+            printf("  Shape %d: pos=(%.2f, %.2f, %.2f) vel=(%.2f, %.2f, %.2f)\n", 
+                i, pos.x, pos.y, pos.z, vel.x, vel.y, vel.z);
         }
 
         int N = (int)shapes.size();
         for (int i = 0;i < N;i++)
         {
             shapes[i]->update(dt);
-        }
-
-        if (i % 5 == 0) {
-            std::cout << "2 - S-S: " << shapes[0]->getCenter().y << " | ";
-            std::cout << "C-C: " << shapes[2]->getCenter().y << " | ";
         }
 
         #pragma omp parallel for schedule(dynamic) reduction(+:collisionsDetected,collisionsResolved)
@@ -1853,13 +1837,20 @@ int main(int argc, char **argv)
                 if(collision) collisionsDetected++;
             }
         }
-
-        if (i % 5 == 0) {
-            std::cout << "S-S: " << shapes[0]->getCenter().y << " | ";
-            std::cout << "C-C: " << shapes[2]->getCenter().y << " | ";
-        }
         
         convertSceneToGPU(shapes, tab_pos, true);
+        
+        //Update GPU state & Render
+        auto start_render = std::chrono::high_resolution_clock::now();
+        image_validity = draw_image(tab_pos, image_current, gpu_id_array, gpu_image, gpu_obj_pointers, gpu_stream, numBlocks, threadsPerBlock);
+        auto end_render = std::chrono::high_resolution_clock::now();
+        if (DEBUG_PERF)
+        {
+            benchmark_performance(i, before_image_draw, time_table, gpu_obj_pointers, gpu_stream);
+            reinit_terminal(i);
+            print_intermediate_bench_values(i, time_table);
+            compute_bench_values(i, bench_values, time_table);
+        }
 
         double time_render = std::chrono::duration<double, std::milli>(end_render - start_render).count();
 
