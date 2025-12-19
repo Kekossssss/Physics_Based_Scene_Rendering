@@ -34,13 +34,30 @@ Now you can run the following different version :
 
 CPU Version :
 ```bash
-./main_cpu [NUMBER OF OBJECTS] [fps] [WIDTH] [HEIGHT]
+./main_cpu
 ```
 
 GPU Version :
 ```bash
-./main_gpu [NUMBER OF OBJECTS] [fps] [WIDTH] [HEIGHT]
+./main_gpu
 ```
+
+Objects can be added by directly modifying the shapes vector in both versions of the code. Objects are instantiated as follows:
+
+Sphere:
+Sphere(Point3D(x, y, z), double diameter, Point3D(vx, vy, vz), double mass, double e, double g)
+
+Cube:
+Cube(Point3D(x, y, z), double side, Point3D(vx, vy, vz), Point3D(ax, ay, az), Point3D(avx, avy, avz), double mass, double e, double g)
+
+Here, (x, y, z) represent the spatial coordinates of the object, and (vx, vy, vz) define its linear velocity. The parameter mass corresponds to the object’s mass, e is the coefficient of restitution, and g represents the gravity constant.
+For cubes, (ax, ay, az) define the linear acceleration, while (avx, avy, avz) correspond to the angular velocity.
+
+The gravity constant g can be modified to make an object independent from gravity, or set to the standard value of 9.81.
+
+The video resolution can be adjusted in utils.hpp using the variables IMAGE_RESOLUTION_WIDTH, IMAGE_RESOLUTION_WIDTH_FLOAT, IMAGE_RESOLUTION_HEIGHT, and IMAGE_RESOLUTION_HEIGHT_FLOAT.
+
+The total number of rendered frames can be configured using RENDERED_FRAMES. In our implementation, the video is rendered at 60 frames per second; therefore, changing RENDERED_FRAMES directly affects the video duration. For example, setting RENDERED_FRAMES to 60 produces a video with a duration of one second.
 
 # Dependencies
 
@@ -57,3 +74,6 @@ This command should be executed in ./Physics_Based_Scene_Rendering
 ```bash
 singularity pull docker://jrottenberg/ffmpeg
 ```
+The following video demonstrates the capabilities of our implementation:
+
+[![IMAGE ALT TEXT HERE](https://img.youtube.com/vi/D36CBSIemU/0.jpg)](https://www.youtube.com/watch?v=-D36CBSIemU)
