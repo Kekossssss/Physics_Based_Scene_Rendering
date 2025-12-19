@@ -1,45 +1,10 @@
-#include <iostream>
-#include <cmath>
-#include <vector>
+#include "cpu_part.hpp"
 #include <iomanip>
-#include <cstdlib>
-#include <ctime>
-#include <limits>
-#include <algorithm>
-
 #include <omp.h> 
 
 using namespace std;
 
 double GRAVITY = 9.81; 
-
-struct Point3D {
-    double x, y, z;
-
-    Point3D() : x(0), y(0), z(0) {} 
-    Point3D(double x0, double y0, double z0) : x(x0), y(y0), z(z0) {}
-
-    Point3D operator+(const Point3D& other) const { return {x + other.x, y + other.y, z + other.z}; }
-    Point3D operator-(const Point3D& other) const { return {x - other.x, y - other.y, z - other.z}; }
-    Point3D operator*(double scalar) const { return {x * scalar, y * scalar, z * scalar}; }
-
-    double dot(const Point3D& other) const { return x * other.x + y * other.y + z * other.z; }
-
-    double length() const { return std::sqrt(x*x + y*y + z*z); }
-
-    Point3D normalize() {
-        double l = length();
-        if (l > 1e-8) return {x / l, y / l, z / l};
-        return {0, 0, 0};
-    }
-
-    double distance(const Point3D& point) const {
-        double dx = point.x - x;
-        double dy = point.y - y;
-        double dz = point.z - z;
-        return std::sqrt(dx*dx + dy*dy + dz*dz);
-    }
-};
 
 ostream& operator<<(ostream& os, const Point3D& p) {
     os << "(" << p.x << ", " << p.y << ", " << p.z << ")";
@@ -51,97 +16,61 @@ bool isValid(const Point3D& p) {
 }
 
 
-class Shape {
-protected:
-    Point3D massCenter;
-    double height, length, width;
-    Point3D velocity;
-    double mass;
-    double restitution;
-    double gravity;
+Shape::Shape(Point3D c, double h, double L, double W, Point3D v, double m, double e, double g)
+    : massCenter(c), height(h), length(L), width(W), velocity(v), mass(m), restitution(e), gravity(g) {}
 
-public:
-    Shape(Point3D c, double h, double L, double W, Point3D v, double m = 500, double e = 0.5, double g = GRAVITY)
-        : massCenter(c), height(h), length(L), width(W), velocity(v), mass(m), restitution(e), gravity(g) {}
+double Shape::distance(const Point3D& point) const {
+    return massCenter.distance(point);
+}
 
-    virtual double distance(const Point3D& point) const { return massCenter.distance(point); }
+void Shape::translate(double dx, double dy, double dz) {
+    massCenter.x += dx; massCenter.y += dy; massCenter.z += dz;
+}
+
+void Shape::update(double dt) {
+    velocity.y += gravity * dt;
+    massCenter = massCenter + velocity * dt;
+}
+
+void Shape::applyImpulse(const Point3D& impulse) {
+    if (isValid(impulse) && mass > 0.0001) {
+        velocity = velocity + impulse * (1.0 / mass);
+    }
+}
+
+// --- Sphere ---
+Sphere::Sphere(Point3D c, double diameter, Point3D v, double m, double e, double g)
+    : Shape(c, diameter, diameter, diameter, v, m, e, g), radius(diameter/2) {}
+
+// --- RigidBody ---
+RigidBody::RigidBody(Point3D c, double h, double L, double W, Point3D v, Point3D a, Point3D av, double m, double e, double g)
+    : Shape(c, h, L, W, v, m, e, g), angle(a), angularVelocity(av) {
+    updateAxes();
+}
+
+void RigidBody::updateAxes() {
+    double cx = std::cos(angle.x), sx = std::sin(angle.x);
+    double cy = std::cos(angle.y), sy = std::sin(angle.y);
+    double cz = std::cos(angle.z), sz = std::sin(angle.z);
     
-    void translate(double dx, double dy, double dz) {
-        massCenter.x += dx; massCenter.y += dy; massCenter.z += dz;
-    }
+    axes[0] = {cy*cz, sx*sy*cz - cx*sz, cx*sy*cz + sx*sz};
+    axes[1] = {cy*sz, sx*sy*sz + cx*cz, cx*sy*sz - sx*cz};
+    axes[2] = {-sy,   sx*cy,            cx*cy};
+}
 
-    virtual void update(double dt) {
-        velocity.y += gravity * dt;
-        massCenter = massCenter + velocity * dt;
-    }
+void RigidBody::update(double dt) {
+    Shape::update(dt);
+    angle = angle + angularVelocity * dt;
+    updateAxes();
+}
 
-    void applyImpulse(const Point3D& impulse) {
-        if (isValid(impulse) && mass > 0.0001) {
-            velocity = velocity + impulse * (1.0 / mass);
-        }
-    }
+// --- Cube & Prism ---
+Cube::Cube(Point3D c, double side, Point3D v, Point3D a, Point3D av, double m, double e, double g)
+    : RigidBody(c, side, side, side, v, a, av, m, e, g) {}
 
-    // Getters
-    Point3D getCenter() const { return massCenter; }
-    Point3D getVelocity() const { return velocity; }
-    double getLength() const { return length; }
-    double getHeight() const { return height; }
-    double getWidth()  const { return width; }
-    double getMass() const { return mass; }
-    double getRestitution() const { return restitution; }
-    double getGravity() const { return gravity; }
-    virtual ~Shape() {}
-};
+RectangularPrism::RectangularPrism(Point3D c, double h, double L, double W, Point3D v, Point3D a, Point3D av, double m, double e, double g)
+    : RigidBody(c, h, L, W, v, a, av, m, e, g) {}
 
-class Sphere : public Shape {
-private:
-    double radius;
-public:
-    Sphere(Point3D c, double diameter, Point3D v, double m = 500, double e = 0.5, double g = GRAVITY)
-        : Shape(c, diameter, diameter, diameter, v, m, e, g), radius(diameter/2) {}
-        
-    double getRadius() const { return radius; }
-};
-
-class RigidBody : public Shape {
-protected:
-    Point3D angle;
-    Point3D angularVelocity;
-    Point3D axes[3];
-
-public:
-    RigidBody(Point3D c, double h, double L, double W, Point3D v, Point3D a, Point3D av, double m = 500, double e = 0.5, double g = GRAVITY)
-        : Shape(c, h, L, W, v, m, e, g), angle(a), angularVelocity(av) {
-        updateAxes();
-    }
-    const Point3D& getAxis(int i) const { return axes[i]; }
-    
-    void updateAxes() {
-        double cx = cos(angle.x), sx = sin(angle.x);
-        double cy = cos(angle.y), sy = sin(angle.y);
-        double cz = cos(angle.z), sz = sin(angle.z);
-        axes[0] = {cy*cz, sx*sy*cz - cx*sz, cx*sy*cz + sx*sz};
-        axes[1] = {cy*sz, sx*sy*sz + cx*cz, cx*sy*sz - sx*cz};
-        axes[2] = {-sy,   sx*cy,            cx*cy};
-    } 
-    virtual void update(double dt) override {
-        Shape::update(dt);
-        angle = angle + angularVelocity * dt;
-        updateAxes();
-    }
-};
-
-class Cube : public RigidBody {
-public:
-    Cube(Point3D c, double side, Point3D v, Point3D a, Point3D av, double m, double e, double g)
-        : RigidBody(c, side, side, side, v, a, av, m, e, g) {}
-};
-
-class RectangularPrism : public RigidBody {
-public:
-    RectangularPrism(Point3D c, double h, double L, double W, Point3D v, Point3D a, Point3D av, double m, double e, double g)
-        : RigidBody(c, h, L, W, v, a, av, m, e, g) {}
-};
 
 ///////// Collision detection
 
@@ -179,11 +108,14 @@ bool checkOBBCollision(const RigidBody& A, const RigidBody& B) {
         AbsR[i][j] = std::abs(R[i][j]) + EPSILON;
     }
 
+    // Test axes A
     for(int i=0; i<3; i++){
         ra = (i==0?A.getLength():(i==1?A.getHeight():A.getWidth()))/2;
         rb = B.getLength()/2 * AbsR[i][0] + B.getHeight()/2 * AbsR[i][1] + B.getWidth()/2 * AbsR[i][2];
         if(std::abs(T.dot(A.getAxis(i))) > ra + rb) return false;
     }
+
+    // Test axes B
     for(int i=0; i<3; i++){
         ra = A.getLength()/2 * AbsR[0][i] + A.getHeight()/2 * AbsR[1][i] + A.getWidth()/2 * AbsR[2][i];
         rb = (i==0?B.getLength():(i==1?B.getHeight():B.getWidth()))/2;
