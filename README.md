@@ -74,9 +74,12 @@ This command should be executed in ./Physics_Based_Scene_Rendering
 ```bash
 singularity pull docker://jrottenberg/ffmpeg
 ```
-The following video demonstrates the capabilities of our implementation:
+
+# The following video demonstrates the capabilities of our implementation:
+You can click on the video to watch it in full.
 
 [![IMAGE ALT TEXT HERE](https://i.ytimg.com/vi/-D36CBSIemU/hqdefault.jpg?sqp=-oaymwE2CNACELwBSFXyq4qpAygIARUAAIhCGAFwAcABBvABAfgB_gmAAtAFigIMCAAQARgRIHIoETAP&rs=AOn4CLCSCvqLHNROWM9I-84iaEzEh3WClw)](https://www.youtube.com/watch?v=-D36CBSIemU)
+
 
 
 
