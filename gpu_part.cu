@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include "gpu_part.hpp"
 
 // Library used for sleep function
 #include <unistd.h>
@@ -1083,7 +1084,7 @@ void compute_bench_values(int i, values_benchmarking& bench_values, time_benchma
         }
     }
 }
-
+/*
 //------------------------------------------------------------------------------------------//
 // Main
 //------------------------------------------------------------------------------------------//
@@ -1329,4 +1330,4 @@ int main (int argc, char** argv) {
         printf("-------------------------------------------------\n");
     }
     clean_video_memory(gpu_id_array, gpu_image, gpu_obj_pointers, gpu_stream);
-}
+}*/
