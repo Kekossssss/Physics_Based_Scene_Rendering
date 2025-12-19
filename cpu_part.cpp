@@ -149,7 +149,6 @@ void resolveSphereSphereCollision(Sphere* s1, Sphere* s2) {
     Point3D relVel = s2->getVelocity() - s1->getVelocity();
     if(relVel.dot(normal) > 0) return;
 
-    // CORRECTION: utiliser les masses directement
     double m1 = s1->getMass();
     double m2 = s2->getMass();
     double totalMass = m1 + m2;
@@ -162,11 +161,10 @@ void resolveSphereSphereCollision(Sphere* s1, Sphere* s2) {
         s2->applyImpulse(normal * j);
     }
 
-    // Position correction avec les bonnes masses
     if(overlap > 0.01) {
         double ratio1 = m2 / totalMass;
         double ratio2 = m1 / totalMass;
-        Point3D corr = normal * (overlap * 0.5); // Réduit de 0.8 à 0.5
+        Point3D corr = normal * (overlap * 0.5); 
         if (isValid(corr)) {
             s1->translate(-corr.x * ratio1, -corr.y * ratio1, -corr.z * ratio1);
             s2->translate( corr.x * ratio2,  corr.y * ratio2,  corr.z * ratio2);
@@ -190,7 +188,6 @@ void resolveRigidRigidCollision(RigidBody* r1, RigidBody* r2) {
     Point3D relVel = r2->getVelocity() - r1->getVelocity();
     if(relVel.dot(normal) > 0) return;
     
-    // CORRECTION: utiliser les masses directement
     double m1 = r1->getMass();
     double m2 = r2->getMass();
     double totalMass = m1 + m2;
@@ -203,7 +200,6 @@ void resolveRigidRigidCollision(RigidBody* r1, RigidBody* r2) {
         r2->applyImpulse(normal * j);
     }
 
-    // Position correction avec les bonnes masses
     if(overlap > 0.01) {
         double ratio1 = m2 / totalMass;
         double ratio2 = m1 / totalMass;
@@ -238,7 +234,6 @@ void resolveSphereRigidCollision(Sphere* s, RigidBody* r) {
     Point3D relVel = s->getVelocity() - r->getVelocity();
     if(relVel.dot(normal) > 0) return;
     
-    // CORRECTION: utiliser les masses directement
     double mS = s->getMass();
     double mR = r->getMass();
     double totalMass = mS + mR;
@@ -251,7 +246,6 @@ void resolveSphereRigidCollision(Sphere* s, RigidBody* r) {
         r->applyImpulse(normal * -j);
     }
 
-    // Position correction avec les bonnes masses
     if(overlap > 0.01) {
         double ratioS = mR / totalMass;
         double ratioR = mS / totalMass;

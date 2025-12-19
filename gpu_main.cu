@@ -328,9 +328,9 @@ int main(int argc, char **argv)
     // Create scene
     std::vector<Shape *> shapes;
     shapes.push_back(new Sphere(Point3D(50, 50, 10), 100, Point3D(0, 0, 0), 500, 0.8, 9.81));
-    shapes.push_back(new Cube(Point3D(300, 200, 20), 200, Point3D(-100, 0, 0),
+    shapes.push_back(new Cube(Point3D(2000, 200, 20), 200, Point3D(-100, 0, 0),
                               Point3D(0, 0, 0), Point3D(0.1, 0.1, 0.1), 10, 0.8, 9.81));
-    shapes.push_back(new RectangularPrism(Point3D(100, 100, 50), 400, 300, 200,
+    shapes.push_back(new RectangularPrism(Point3D(100, 200, 50), 400, 300, 200,
                                           Point3D(100, 5, 0), Point3D(0, 0, 0),
                                           Point3D(0, 0, 0), 10, 0.8, 9.81));
     shapes.push_back(new Sphere(Point3D(130, 50, 10), 100, Point3D(0, 0, 0), 10, 0.8, 9.81));
