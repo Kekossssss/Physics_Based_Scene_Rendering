@@ -337,52 +337,46 @@ int main(int argc, char **argv)
 
     std::vector<Shape *> shapes;
 
-    shapes.push_back(new RectangularPrism(
-        Point3D(512, 980, 0), 40, 1200, 500, 
-        Point3D(0, 0, 0), Point3D(0, 0, 0), Point3D(0, 0, 0), 
-        1e20, 0.5, 0.0 
-    ));
-
-    shapes.push_back(new RectangularPrism(
-        Point3D(-20, 500, 0), 1000, 40, 500, 
+    shapes.push_back(new Cube(
+        Point3D(512, 2050, 0), 2100, 
         Point3D(0, 0, 0), Point3D(0, 0, 0), Point3D(0, 0, 0), 
         1e20, 0.5, 0.0
-    ));
-
-    shapes.push_back(new RectangularPrism(
-        Point3D(1044, 500, 0), 1000, 40, 500, 
-        Point3D(0, 0, 0), Point3D(0, 0, 0), Point3D(0, 0, 0), 
-        1e20, 0.5, 0.0
-    ));
-
-    shapes.push_back(new RectangularPrism(
-        Point3D(300, 600, 0), 20, 700, 200, 
-        Point3D(0, 0, 0), Point3D(0, 0, 0.4), Point3D(0, 0, 0), 
-        1e20, 0.6, 0.0
-    ));
-
-    shapes.push_back(new Sphere(
-        Point3D(700, 100, 0), 80, 
-        Point3D(-50, 0, 0), 
-        100, 0.9, 9.81
     ));
 
     shapes.push_back(new Cube(
-        Point3D(200, 50, 0), 90, 
-        Point3D(0, 0, 0), Point3D(0.5, 0.5, 0.2), Point3D(1.0, 0.5, 0.5), 
-        150, 0.4, 9.81
+        Point3D(-1050, 500, 0), 2100, 
+        Point3D(0, 0, 0), Point3D(0, 0, 0), Point3D(0, 0, 0), 
+        1e20, 0.5, 0.0
     ));
 
-    shapes.push_back(new RectangularPrism(
-        Point3D(500, 200, 0), 40, 200, 100, 
-        Point3D(0, 100, 0), Point3D(0, 0, 0.2), Point3D(0, 0, 0.5), 
-        200, 0.3, 9.81
+    shapes.push_back(new Cube(
+        Point3D(2074, 500, 0), 2100, 
+        Point3D(0, 0, 0), Point3D(0, 0, 0), Point3D(0, 0, 0), 
+        1e20, 0.5, 0.0
+    ));
+
+    shapes.push_back(new Cube(
+        Point3D(500, 200, 0), 160, 
+        Point3D(0, 100, 0), Point3D(0.5, 0.5, 0), Point3D(3.0, 0.0, 2.0), 
+        200, 0.9, 9.81
     ));
 
     shapes.push_back(new Sphere(
-        Point3D(50, 800, 0), 60, 
-        Point3D(600, -900, 0), 
-        80, 0.8, 9.81
+        Point3D(100, 500, 0), 140, 
+        Point3D(600, -200, 0), 
+        300, 0.9, 9.81
+    ));
+
+    shapes.push_back(new Cube(
+        Point3D(900, 800, 0), 150, 
+        Point3D(-500, -700, 0), Point3D(0, 0, 0.2), Point3D(0, 2.0, 0), 
+        200, 0.9, 9.81
+    ));
+
+    shapes.push_back(new Sphere(
+        Point3D(550, 50, 0), 120, 
+        Point3D(-50, 800, 0), 
+        150, 0.95, 9.81
     ));
 
     // GPU conversion
