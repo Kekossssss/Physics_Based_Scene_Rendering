@@ -337,48 +337,27 @@ int main(int argc, char **argv)
 
     std::vector<Shape *> shapes;
 
-    shapes.push_back(new Cube(
-        Point3D(512, 2050, 0), 2100, 
-        Point3D(0, 0, 0), Point3D(0, 0, 0), Point3D(0, 0, 0), 
-        1e20, 0.5, 0.0
-    ));
+    shapes.push_back(new Cube(Point3D(512, 2050, 0), 2100, Point3D(0, 0, 0), Point3D(0, 0, 0), Point3D(0, 0, 0), 1e20, 0.5, 0.0));
+    shapes.push_back(new Cube(Point3D(512, -1050, 0), 2100, Point3D(0, 0, 0), Point3D(0, 0, 0), Point3D(0, 0, 0), 1e20, 0.5, 0.0));
+    shapes.push_back(new Cube(Point3D(-1050, 500, 0), 2100, Point3D(0, 0, 0), Point3D(0, 0, 0), Point3D(0, 0, 0), 1e20, 0.5, 0.0));
+    shapes.push_back(new Cube(Point3D(2074, 500, 0), 2100, Point3D(0, 0, 0), Point3D(0, 0, 0), Point3D(0, 0, 0), 1e20, 0.5, 0.0));
 
-    shapes.push_back(new Cube(
-        Point3D(-1050, 500, 0), 2100, 
-        Point3D(0, 0, 0), Point3D(0, 0, 0), Point3D(0, 0, 0), 
-        1e20, 0.5, 0.0
-    ));
+    shapes.push_back(new Sphere(Point3D(200, 200, 0), 90, Point3D(200, 100, 0), 100, 0.95, 9.81));
+    shapes.push_back(new Cube(Point3D(400, 200, 0), 90, Point3D(-100, 200, 0), Point3D(0.2, 0.2, 0), Point3D(1, 1, 1), 100, 0.95, 9.81));
+    shapes.push_back(new Sphere(Point3D(600, 200, 0), 90, Point3D(50, 50, 0), 100, 0.95, 9.81));
+    shapes.push_back(new Cube(Point3D(800, 200, 0), 90, Point3D(-200, 100, 0), Point3D(0, 0, 0), Point3D(2, 0, 1), 100, 0.95, 9.81));
 
-    shapes.push_back(new Cube(
-        Point3D(2074, 500, 0), 2100, 
-        Point3D(0, 0, 0), Point3D(0, 0, 0), Point3D(0, 0, 0), 
-        1e20, 0.5, 0.0
-    ));
+    shapes.push_back(new Cube(Point3D(250, 400, 0), 90, Point3D(150, -50, 0), Point3D(0.5, 0, 0), Point3D(0, 2, 0), 100, 0.95, 9.81));
+    shapes.push_back(new Sphere(Point3D(450, 400, 0), 90, Point3D(-50, -150, 0), 100, 0.95, 9.81));
+    shapes.push_back(new Cube(Point3D(650, 400, 0), 90, Point3D(100, 100, 0), Point3D(0, 0, 0.5), Point3D(1, 1, 0), 100, 0.95, 9.81));
+    shapes.push_back(new Sphere(Point3D(850, 400, 0), 90, Point3D(-300, 0, 0), 100, 0.95, 9.81));
 
-    shapes.push_back(new Cube(
-        Point3D(500, 200, 0), 160, 
-        Point3D(0, 100, 0), Point3D(0.5, 0.5, 0), Point3D(3.0, 0.0, 2.0), 
-        200, 0.9, 9.81
-    ));
+    shapes.push_back(new Sphere(Point3D(200, 600, 0), 90, Point3D(0, -400, 0), 100, 0.95, 9.81));
+    shapes.push_back(new Cube(Point3D(400, 600, 0), 90, Point3D(50, -200, 0), Point3D(0, 0, 0), Point3D(3, 0, 0), 100, 0.95, 9.81));
+    shapes.push_back(new Sphere(Point3D(600, 600, 0), 90, Point3D(-50, -200, 0), 100, 0.95, 9.81));
+    shapes.push_back(new Cube(Point3D(800, 600, 0), 90, Point3D(200, -300, 0), Point3D(0.1, 0.1, 0.1), Point3D(0, 3, 0), 100, 0.95, 9.81));
 
-    shapes.push_back(new Sphere(
-        Point3D(100, 500, 0), 140, 
-        Point3D(600, -200, 0), 
-        300, 0.9, 9.81
-    ));
-
-    shapes.push_back(new Cube(
-        Point3D(900, 800, 0), 150, 
-        Point3D(-500, -700, 0), Point3D(0, 0, 0.2), Point3D(0, 2.0, 0), 
-        200, 0.9, 9.81
-    ));
-
-    shapes.push_back(new Sphere(
-        Point3D(550, 50, 0), 120, 
-        Point3D(-50, 800, 0), 
-        150, 0.95, 9.81
-    ));
-
+    
     // GPU conversion
     int numObjects = convertSceneToGPU(shapes, tab_pos, true);
     std::cout << "Converted " << numObjects << " objects\n";
