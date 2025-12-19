@@ -8,8 +8,8 @@ all: $(TARGET)
 $(TARGET): main.cu
 	nvcc $(NVFLAGS) -o main main.cu
 
-main_cpu:  main_cpu.cpp
-	g++ $(GCCFLAGS) utils.cpp cpu_renderer.cpp main_cpu.cpp -o main_cpu 
+main_cpu:  cpu_main.cpp
+	g++ $(GCCFLAGS) utils.cpp cpu_renderer.cpp cpu_main.cpp -o main_cpu 
 
 main_gpu : gpu_main.cu
 	nvcc $(NVFLAGS) -o gpu_main gpu_main.cu utils.cpp cpu_part.cpp

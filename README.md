@@ -9,6 +9,39 @@ We use various techniques in order to output an image based on these positions b
 
 ## Building the project
 
+1. Clone the repository in your directory :
+```bash
+git clone https://github.com/Kekossssss/Physics_Based_Scene_Rendering.git
+```
+
+Install the following dependencies : Singularity and ffmpeg.
+You can find proper links below.
+Make sure to add Singularity in your path.
+
+You can compile and run a few versions :
+
+CPU Version :
+```bash
+make main_cpu
+```
+
+GPU Version :
+```bash
+make main_cpu
+```
+
+Now you can run the following different version :
+
+CPU Version :
+```bash
+./main_cpu [NUMBER OF OBJECTS] [fps] [WIDTH] [HEIGHT]
+```
+
+GPU Version :
+```bash
+./main_gpu [NUMBER OF OBJECTS] [fps] [WIDTH] [HEIGHT]
+```
+
 # Dependencies
 
 In order to execute the full programm, you will need to have installed a few things :
@@ -20,6 +53,7 @@ sudo apt-get install -y singularity-container
 ```
  - FFMpeg: Used for outputing the final video
 
+This command should be executed in ./Physics_Based_Scene_Rendering
 ```bash
 singularity pull docker://jrottenberg/ffmpeg
 ```

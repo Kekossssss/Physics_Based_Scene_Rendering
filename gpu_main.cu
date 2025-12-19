@@ -70,8 +70,8 @@ public:
                 "singularity exec ffmpeg_latest.sif "
          "ffmpeg -y -f rawvideo -pixel_format rgb24 -video_size %dx%d "
          "-framerate %d -i - -c:v libx264 -preset ultrafast -crf 18 "
-         "-pix_fmt yuv420p -movflags +faststart %s",
-                 width, height, fps, filename); //2>/dev/null
+         "-pix_fmt yuv420p -movflags +faststart %s //2>/dev/null",
+                 width, height, fps, filename); 
 
         std::cout << "Opening FFmpeg pipe...\n";
         ffmpeg_pipe = popen(command, "w");
@@ -1444,26 +1444,6 @@ bool draw_image(object_to_gpu &tab_pos, image_array &image, id_array *identifier
 }
 
 //------------------------------------------------------------------------------------------//
-// Convenience wrappers: draw directly from CPU shapes (GPU pipeline)
-//------------------------------------------------------------------------------------------//
-
-// Convert full scene and call GPU pipeline
-bool draw_image_gpu_from_shapes(const std::vector<Shape *> &shapes, image_array &image, id_array *identifier_array, image_array *gpu_image, gpu_object_pointers *gpu_obj_pointers, cudaStream_t *gpu_stream, dim3 numBlocks, dim3 threadsPerBlock, bool randomColors = true)
-{
-    object_to_gpu tab_pos;
-    int numObjects = convertSceneToGPU(shapes, tab_pos, randomColors);
-    (void)numObjects; // currently not used by GPU pipeline, kept for future use
-    return draw_image(tab_pos, image, identifier_array, gpu_image, gpu_obj_pointers, gpu_stream, numBlocks, threadsPerBlock);
-}
-
-// Update only physics state (efficient) and then call GPU pipeline
-bool draw_image_gpu_with_update(const std::vector<Shape *> &shapes, object_to_gpu &tab_pos, int numObjects, image_array &image, id_array *identifier_array, image_array *gpu_image, gpu_object_pointers *gpu_obj_pointers, cudaStream_t *gpu_stream, dim3 numBlocks, dim3 threadsPerBlock)
-{
-    updateGPUPhysicsState(shapes, tab_pos, numObjects);
-    return draw_image(tab_pos, image, identifier_array, gpu_image, gpu_obj_pointers, gpu_stream, numBlocks, threadsPerBlock);
-}
-
-//------------------------------------------------------------------------------------------//
 // Benchmark debug functions
 //------------------------------------------------------------------------------------------//
 void benchmark_performance(int i, std::chrono::_V2::system_clock::time_point before_image_draw, time_benchmarking *time_table, gpu_object_pointers *gpu_obj_pointers, cudaStream_t *gpu_stream)
@@ -1716,18 +1696,13 @@ int main(int argc, char **argv)
     double dt = 1 / 60;
 
     // Double buffering: two image arrays
-    image_array image_current, image_backup;
+    image_array image_current;
     int img_size = IMAGE_RESOLUTION_WIDTH * IMAGE_RESOLUTION_HEIGHT;
 
     image_current.red = new unsigned char[RESOLUTION];
     image_current.green = new unsigned char[RESOLUTION];
     image_current.blue = new unsigned char[RESOLUTION];
     image_current.alpha = new unsigned char[RESOLUTION];
-
-    image_backup.red = new unsigned char[RESOLUTION];
-    image_backup.green = new unsigned char[RESOLUTION];
-    image_backup.blue = new unsigned char[RESOLUTION];
-    image_backup.alpha = new unsigned char[RESOLUTION];
     
     // Double buffering for RGB data (for FFmpeg)
     unsigned char *rgb_buffer_1 = new unsigned char[img_size * 3];
@@ -1802,7 +1777,7 @@ int main(int argc, char **argv)
         }
         
         
-        // ---- PHASE 2: Update GPU state & Render ----
+        //Update GPU state & Render
         auto start_render = std::chrono::high_resolution_clock::now();
         updateGPUPhysicsState(shapes, tab_pos, numObjects);
         image_validity = draw_image(tab_pos, image_current, gpu_id_array, gpu_image, gpu_obj_pointers, gpu_stream, numBlocks, threadsPerBlock);
@@ -1815,14 +1790,13 @@ int main(int argc, char **argv)
             compute_bench_values(i, bench_values, time_table);
         }
 
-        // Temporary positions updates for testing rendering techniques
         int N = (int)shapes.size() - 1;
         for (int i = 0;i < N;i++)
         {
             shapes[i]->update(dt);
         }
 
-        bool resolveCollisions = true; // Enable/disable resolution step
+        bool resolveCollisions = true; 
         #pragma omp parallel for schedule(dynamic) reduction(+:collisionsDetected,collisionsResolved)
         for (int i = 0; i < N; i++) {
             for (int j = i + 1; j < N; j++) {
@@ -1848,7 +1822,6 @@ int main(int argc, char **argv)
             }
         }
 
-        // Détection et résolution de collisions
         #pragma omp parallel for schedule(dynamic) reduction(+:collisionsDetected,collisionsResolved)
         for(int i=0; i<N; i++) {
             for(int j=i+1; j<N; j++) {
@@ -1896,16 +1869,16 @@ int main(int argc, char **argv)
 
         double time_render = std::chrono::duration<double, std::milli>(end_render - start_render).count();
 
-        // ---- PHASE 3: Copy to backup buffer ----
+        //Copy to backup buffer
         synchronize_gpu_image(image_validity, gpu_obj_pointers, gpu_stream);
         if (image_validity) {
-                // ---- PHASE 3: Convert to RGB (parallel) ----
+                // Convert to RGB
             auto start_convert = std::chrono::high_resolution_clock::now();
             convertToRGBParallel(image_current, current_rgb, num_threads);
             auto end_convert = std::chrono::high_resolution_clock::now();
             double time_convert = std::chrono::duration<double, std::milli>(end_convert - start_convert).count();
 
-            // ---- PHASE 4: Wait for previous encode to complete ----
+            // Wait for previous encode to complete
             auto start_wait = std::chrono::high_resolution_clock::now();
             pthread_mutex_lock(&frame_data.mutex);
             while (frame_data.ready)
@@ -1916,7 +1889,7 @@ int main(int argc, char **argv)
             auto end_wait = std::chrono::high_resolution_clock::now();
             double time_wait = std::chrono::duration<double, std::milli>(end_wait - start_wait).count();
 
-            // ---- PHASE 5: Queue encode (async) ----
+            // Queue encode (async)
             pthread_mutex_lock(&frame_data.mutex);
             frame_data.rgb_buffer = current_rgb;
             frame_data.ready = true;
@@ -1926,7 +1899,7 @@ int main(int argc, char **argv)
             // Swap buffers for next frame
             std::swap(current_rgb, backup_rgb);
 
-            if (i % 30 == 0)
+            if (i % 30 == 0 and DEBUG_PERF)
             {
                 //std::cout << "Update:   " << time_update << " ms\n";
                 std::cout << "Render:   " << time_render << " ms\n";
@@ -1940,15 +1913,6 @@ int main(int argc, char **argv)
         // usleep(3000000);
     }
     printf("--------------End of Rendering--------------\n");
-
-    // Final image output
-    /*if (ONLY_FINAL_FRAME)
-    {
-        if (image_validity == true and save_as_bmp(image, "test_image_gpu.bmp") == false)
-        {
-            printf("Image saving error, leaving loop\n");
-        }
-    }*/
 
     // Output performance metrics
     printf("\n--------------Run Parameters Recap---------------\n");
