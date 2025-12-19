@@ -298,6 +298,7 @@ void copyImageArray(const image_array &src, image_array &dst)
     memcpy(dst.alpha, src.alpha, size);
 }
 
+
 #define RENDERED_FRAMES 100
 
 //------------------------------------------------------------------------------------------//
