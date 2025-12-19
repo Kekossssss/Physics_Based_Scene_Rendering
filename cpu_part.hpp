@@ -97,6 +97,7 @@ private:
 public:
     Sphere(Point3D c, double diameter, Point3D v, double m = 500, double e = 0.5, double g = GRAVITY);
     double getRadius() const { return radius; }
+    double getDiameter() const { return 2*radius; }
 };
 
 /**
@@ -113,6 +114,8 @@ public:
     RigidBody(Point3D c, double h, double L, double W, Point3D v, Point3D a, Point3D av, double m = 500, double e = 0.5, double g = GRAVITY);
     
     const Point3D& getAxis(int i) const { return axes[i]; }
+    Point3D getAngle() const { return angle; }
+    Point3D getAngularVelocity() const { return angularVelocity; }
     
     // Recomputes local axes based on current angles
     void updateAxes();
