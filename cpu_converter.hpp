@@ -1,7 +1,7 @@
 #ifndef CPU_GPU_CONVERTER_HPP
 #define CPU_GPU_CONVERTER_HPP
 
-#include "cpu_part_collisions.hpp"
+#include "cpu_part.hpp"
 #include "utils.hpp"
 #include <vector>
 #include <array>
@@ -80,22 +80,6 @@ inline void convertShapeToGPU(const Shape *shape, object_to_gpu &gpuObj, int ind
     // Set dimensions based on detected type
     if (sphere)
     { // Sphere
-<<<<<<< HEAD
-        gpuObj.nb_dim[index] = 1;
-        // Some sphere implementations provide getDiameter(), others getRadius()
-        double diameter = 0.0;
-        // Try getDiameter()
-        // Dynamic cast to the other Sphere type won't fail; try both accessors guarded by checks
-        #ifdef __GNUC__
-        // If getDiameter exists, use it; otherwise fall back to 2*getRadius()
-        #endif
-        // Prefer getDiameter if available
-        // Safe approach: try to call getRadius() and derive diameter
-        diameter = 2.0 * sphere->getRadius();
-        gpuObj.dimension[index][0] = static_cast<float>(diameter);
-        gpuObj.dimension[index][1] = 0.0f;
-        gpuObj.dimension[index][2] = 0.0f;
-=======
         const Sphere *sphere = dynamic_cast<const Sphere *>(shape);
         if (sphere)
         {
@@ -104,7 +88,6 @@ inline void convertShapeToGPU(const Shape *shape, object_to_gpu &gpuObj, int ind
             gpuObj.dimension[index][1] = 0.0f;
             gpuObj.dimension[index][2] = 0.0f;
         }
->>>>>>> ddbdae420e5a6ce59c5b6d5a4e84b456a0beea24
     }
     else if (cube && !prism)
     { // Cube

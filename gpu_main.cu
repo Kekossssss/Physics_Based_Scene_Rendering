@@ -16,17 +16,13 @@
 
 #include "cpu_converter.hpp"
 #include "cpu_renderer.hpp"
-#include "cpu_part_collisions.hpp"
+#include "cpu_part.hpp"
 
 #include <stdlib.h>
 #include <iostream>
 #include <thread>
 #include <pthread.h>
 
-<<<<<<< HEAD
-// Gravity defined in physics module
-=======
->>>>>>> ddbdae420e5a6ce59c5b6d5a4e84b456a0beea24
 extern double gravity;
 
 // ============================================================================
@@ -96,17 +92,10 @@ public:
     {
         if (!is_open)
             return false;
-<<<<<<< HEAD
 
         // Convert RGBA to RGB24 (FFmpeg format)
         unsigned char *rgb_buffer = new unsigned char[width * height * 3];
 
-=======
-
-        // Convert RGBA to RGB24 (FFmpeg format)
-        unsigned char *rgb_buffer = new unsigned char[width * height * 3];
-
->>>>>>> ddbdae420e5a6ce59c5b6d5a4e84b456a0beea24
         for (int i = 0; i < width * height; i++)
         {
             rgb_buffer[i * 3 + 0] = image.red[i];
@@ -127,32 +116,13 @@ public:
             return false;
 
         size_t written = fwrite(rgb_buffer, 1, width * height * 3, ffmpeg_pipe);
-<<<<<<< HEAD
-        fflush(ffmpeg_pipe);  
-
         return (written == (size_t)(width * height * 3));
     }
-
-    ~MP4VideoEncoder()
-    {
-        if (is_open)
-        {
-            std::cout << "Closing FFmpeg encoder...\n";
-            fflush(ffmpeg_pipe);  
-            pclose(ffmpeg_pipe);
-        }
-=======
-        return (written == (size_t)(width * height * 3));
->>>>>>> ddbdae420e5a6ce59c5b6d5a4e84b456a0beea24
-    }
-};
 
 // ============================================================================
 // PTHREAD WORKER FUNCTIONS
 // ============================================================================
 
-<<<<<<< HEAD
-=======
     ~MP4VideoEncoder()
     {
         if (is_open)
@@ -167,7 +137,6 @@ public:
 // PTHREAD WORKER FUNCTIONS
 // ============================================================================
 
->>>>>>> ddbdae420e5a6ce59c5b6d5a4e84b456a0beea24
 void *updateShapesThread(void *arg)
 {
     ThreadData *data = (ThreadData *)arg;
@@ -329,16 +298,7 @@ void copyImageArray(const image_array &src, image_array &dst)
     memcpy(dst.alpha, src.alpha, size);
 }
 
-<<<<<<< HEAD
-#define RENDERED_FRAMES 1000
-=======
-
-<<<<<<< HEAD
-#define RENDERED_FRAMES 500
->>>>>>> ddbdae420e5a6ce59c5b6d5a4e84b456a0beea24
-=======
 #define RENDERED_FRAMES 100
->>>>>>> parent of ddbdae4... Updated bench to show miscomputation of collisions
 
 //------------------------------------------------------------------------------------------//
 // CPU Functions (Video Memory Management)
@@ -1720,8 +1680,6 @@ int main(int argc, char **argv)
     printf("Program Starting\n");
     const char *output_file = (argc >= 4) ? argv[3] : "output.mp4";
 
-    const char *output_file = (argc >= 4) ? argv[3] : "output.mp4";
-
     int num_threads = 5;
 
     // Performance debug values
@@ -1748,17 +1706,7 @@ int main(int argc, char **argv)
     shapes.push_back(new RectangularPrism(Point3D(100, 100, 50), 400, 300, 200,
                                           Point3D(5, 5, 0), Point3D(0, 0, 0),
                                           Point3D(0, 0, 0)));
-<<<<<<< HEAD
-    shapes.push_back(new RectangularPrism(Point3D(1200, 400, 50), 1000, 50, 1000,
-                                          Point3D(5, 5, 0), Point3D(0, 0, 0),
-                                          Point3D(0, 0, 0)));
-
-    shapes.push_back(new RectangularPrism(Point3D(400, 400, 50), 1000, 50, 1000,
-                                          Point3D(5, 5, 0), Point3D(0, 0, 0),
-                                          Point3D(0, 0, 0)));
-=======
     shapes.push_back(new Sphere(Point3D(130, 50, 10), 100, Point3D(0, 0, 0)));
->>>>>>> ddbdae420e5a6ce59c5b6d5a4e84b456a0beea24
 
     // GPU conversion
     int numObjects = convertSceneToGPU(shapes, tab_pos, true);
@@ -1779,38 +1727,6 @@ int main(int argc, char **argv)
     image_backup.green = new unsigned char[RESOLUTION];
     image_backup.blue = new unsigned char[RESOLUTION];
     image_backup.alpha = new unsigned char[RESOLUTION];
-
-<<<<<<< HEAD
-    memset(image_current.red, 128, img_size);
-    memset(image_current.green, 128, img_size);
-    memset(image_current.blue, 128, img_size);
-    memset(image_current.alpha, 255, img_size);
-
-    // Setup pipeline for async BMP saving
-    // Double buffering for RGB data (for FFmpeg)
-    unsigned char *rgb_buffer_1 = new unsigned char[img_size * 3];
-    unsigned char *rgb_buffer_2 = new unsigned char[img_size * 3];
-
-    // Create video encoder
-    MP4VideoEncoder encoder(output_file, IMAGE_RESOLUTION_WIDTH, IMAGE_RESOLUTION_HEIGHT, 60);
-
-    // Setup async encoding pipeline
-    MP4FrameData frame_data;
-    frame_data.ready = false;
-    frame_data.done = false;
-    frame_data.rgb_buffer = rgb_buffer_1;
-    pthread_mutex_init(&frame_data.mutex, nullptr);
-    pthread_cond_init(&frame_data.cond, nullptr);
-
-    VideoEncoderThreadData encoder_thread_data;
-    encoder_thread_data.encoder = &encoder;
-    encoder_thread_data.frame_data = &frame_data;
-
-    pthread_t encoder_thread;
-    pthread_create(&encoder_thread, nullptr, asyncVideoEncoderThread, &encoder_thread_data);
-
-    auto start_total = std::chrono::high_resolution_clock::now();
-=======
     
     // Double buffering for RGB data (for FFmpeg)
     unsigned char *rgb_buffer_1 = new unsigned char[img_size * 3];
@@ -1833,7 +1749,6 @@ int main(int argc, char **argv)
 
     pthread_t encoder_thread;
     pthread_create(&encoder_thread, nullptr, asyncVideoEncoderThread, &encoder_thread_data);
->>>>>>> ddbdae420e5a6ce59c5b6d5a4e84b456a0beea24
 
     // Track which RGB buffer to use (ping-pong)
     unsigned char *current_rgb = rgb_buffer_1;
@@ -1869,18 +1784,12 @@ int main(int argc, char **argv)
         std::chrono::duration<double, std::milli> duration_after_init = after_init - start;
         printf("Execution time after initialisation: %f ms\n", duration_after_init.count());
     }
-<<<<<<< HEAD
-    
-    long long collisionsDetected = 0;
-    long long collisionsResolved = 0;
-=======
 
     long long collisionsDetected = 0;
     long long collisionsResolved = 0;
     bool resolveCollisions = true;
 
     int N = shapes.size();
->>>>>>> ddbdae420e5a6ce59c5b6d5a4e84b456a0beea24
 
     printf("--------------Start Rendering---------------\n");
     for (int i = 0; i < RENDERED_FRAMES; i++)
@@ -1894,13 +1803,8 @@ int main(int argc, char **argv)
         
         // ---- PHASE 2: Update GPU state & Render ----
         auto start_render = std::chrono::high_resolution_clock::now();
-<<<<<<< HEAD
-        // Use helper that updates physics state then invokes GPU pipeline
-        image_validity = draw_image_gpu_with_update(shapes, tab_pos, numObjects, image_current, gpu_id_array, gpu_image, gpu_obj_pointers, gpu_stream, numBlocks, threadsPerBlock);
-=======
         updateGPUPhysicsState(shapes, tab_pos, numObjects);
         image_validity = draw_image(tab_pos, image_current, gpu_id_array, gpu_image, gpu_obj_pointers, gpu_stream, numBlocks, threadsPerBlock);
->>>>>>> ddbdae420e5a6ce59c5b6d5a4e84b456a0beea24
         auto end_render = std::chrono::high_resolution_clock::now();
         if (DEBUG_PERF)
         {
@@ -2017,18 +1921,9 @@ int main(int argc, char **argv)
             frame_data.ready = true;
             pthread_cond_signal(&frame_data.cond);
             pthread_mutex_unlock(&frame_data.mutex);
-<<<<<<< HEAD
 
             // Swap buffers for next frame
             std::swap(current_rgb, backup_rgb);
-
-            //auto frame_end = std::chrono::high_resolution_clock::now();
-            //double time_frame = std::chrono::duration<double, std::milli>(frame_end - frame_start).count();
-=======
-
-            // Swap buffers for next frame
-            std::swap(current_rgb, backup_rgb);
->>>>>>> ddbdae420e5a6ce59c5b6d5a4e84b456a0beea24
 
             if (i % 30 == 0)
             {
@@ -2108,10 +2003,10 @@ int main(int argc, char **argv)
     pthread_join(encoder_thread, nullptr);
 
     auto end_total = std::chrono::high_resolution_clock::now();
-    double duration_total = std::chrono::duration<double, std::milli>(end_total - start_total).count();
+    //double duration_total = std::chrono::duration<double, std::milli>(end_total - start_total).count();
 
     std::cout << "\n=== ENCODING COMPLETE ===\n";
-    std::cout << "Total time:     " << duration_total << " ms\n";
+    //std::cout << "Total time:     " << duration_total << " ms\n";
     //std::cout << "Average frame:  " << duration_total / num_frames << " ms\n";
     //std::cout << "Average FPS:    " << (num_frames * 1000.0) / duration_total << "\n";
     std::cout << "Output file:    " << output_file << "\n";
